@@ -14,7 +14,22 @@ Le fichier `render.yaml` est déjà fourni.
 6. La base SQLite est placée sur le disque persistant `/var/data/olivia.db`.
 7. L'adresse HTTPS fournie par Render devient l'adresse publique du jeu.
 
-Le premier compte créé devient administrateur, comme indiqué dans le README.
+Les comptes administrateurs existants conservent leurs droits. L'activation par
+localhost concerne uniquement un serveur lancé sur son propre PC : le navigateur
+du propriétaire ne devient pas localhost lorsqu'il visite Render. Sur un serveur
+Render neuf, un administrateur doit attribuer le rôle au compte voulu via la
+console du serveur, sans accorder de droits à partir d'une IP publique partagée.
+
+## Structure du dépôt GitHub
+
+Le code du jeu se trouve dans `olivia-nightclub/`. Le Dockerfile à la racine du
+dépôt copie ce sous-dossier et lance `python run.py`. Le Dockerfile à l'intérieur
+du sous-dossier convient aussi si le Root Directory Render est `olivia-nightclub`.
+`run.py` respecte `OLIVIA_PORT`, puis le `PORT` fourni par Render.
+
+Ne jamais versionner `data/`, les fichiers SQLite, leurs journaux ou les caches
+Python. Les `.gitignore` et `.dockerignore` fournis les excluent du code publié
+et de l'image Docker. Le disque persistant du service reste la source de vérité.
 
 ## Important : persistance
 

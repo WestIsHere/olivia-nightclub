@@ -1,0 +1,12 @@
+.git/
+**/__pycache__/
+**/*.py[cod]
+**/data/
+**/*.db*
+**/*.sqlite*
+**/*.log
+**/.env*
+**/.claude/
+**/tests/
+**/reference/
+**/docs/

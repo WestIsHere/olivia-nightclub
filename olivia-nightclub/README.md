@@ -15,8 +15,15 @@ python run.py
 Sur Windows, double-cliquer sur `start.bat` fait les deux (utilise Python 3.12
 installé dans `%LOCALAPPDATA%\Programs\Python`, sinon le lanceur `py`).
 
-Puis ouvrir <http://localhost:8000>. Le **premier compte créé est administrateur**
-(panneau `⚙ Admin` dans la navigation).
+Puis ouvrir <http://localhost:8000>. Depuis le PC qui héberge le serveur, cocher
+**Activer mon accès administrateur sur cet ordinateur** à l'inscription, ou utiliser
+ce bouton dans **Paramètres** pour un compte existant. Les administrateurs déjà
+enregistrés conservent leurs droits. Un joueur distant ne devient pas administrateur
+simplement parce qu'il est le premier inscrit.
+
+La version actuelle inclut la refonte visuelle, le catalogue de rap 2016–2026,
+les clips YouTube propres à chaque showcase et la suppression ciblée des clubs.
+Voir [la présentation de la refonte](docs/REFONTE_UI.md).
 
 Tests du moteur (sans serveur) : `python tests/test_engine.py`.
 

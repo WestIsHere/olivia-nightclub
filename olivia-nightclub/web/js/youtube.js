@@ -1,197 +1,171 @@
-/* ==========================================================
-   YouTubeStage — « écran de scène » : lecteur YouTube officiel
-   (IFrame Player API) utilisé pour les showcases.
-
-   Conforme aux règles YouTube : pas de téléchargement, lecteur
-   visible (≥ 200 px), vidéo streamée depuis youtube.com.
-   Piloté par l'AudioManager : même règle LOCALE que les fichiers
-   (uniquement dans la vue du club concerné), extrait aléatoire,
-   fondu, arrêt immédiat en quittant la vue.
-   ========================================================== */
-
-let apiPromise = null;
-
+/* Lecteur officiel YouTube : vidéo et son, jamais de fichier téléchargé. */
+let apiPromise;
 function loadApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
   if (apiPromise) return apiPromise;
   apiPromise = new Promise((resolve, reject) => {
-    if (window.YT && window.YT.Player) return resolve(window.YT);
-    const prev = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => { if (prev) try { prev(); } catch {} resolve(window.YT); };
-    const s = document.createElement("script");
-    s.src = "https://www.youtube.com/iframe_api";
-    s.onerror = () => reject(new Error("YouTube API indisponible"));
-    document.head.appendChild(s);
-    setTimeout(() => reject(new Error("YouTube API : délai dépassé")), 15000);
-  });
-  apiPromise.catch(() => { apiPromise = null; });
+    const timeout = setTimeout(() => reject(new Error("YouTube indisponible")), 15000);
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      clearTimeout(timeout);
+      try { previous?.(); } catch {}
+      resolve(window.YT);
+    };
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.onerror = () => { clearTimeout(timeout); reject(new Error("YouTube indisponible")); };
+    document.head.appendChild(script);
+  }).catch((error) => { apiPromise = null; throw error; });
   return apiPromise;
 }
-
-function esc(s) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
 export class YouTubeStage {
   constructor() {
     this.el = null;
     this.player = null;
     this.readyPromise = null;
-    this.current = null;      // { token, onEnded, seconds, started }
-    this.volume = 0.7;        // 0..1
-    this.fadeTimer = null;
-    this.clipTimer = null;
-    this.watchTimer = null;
+    this.current = null;
+    this.volume = 0.7;
     this.blocked = false;
-    this.onBlocked = null;    // () => void
+    this.onBlocked = null;
     this.onPlaying = null;
+    this.watchTimer = null;
   }
 
   mount() {
     if (this.el) return this.el;
-    const el = document.createElement("div");
+    const el = document.createElement("section");
     el.id = "yt-stage";
     el.className = "yt-stage hidden";
-    el.innerHTML = `<div class="yt-head"><span class="yt-live">● LIVE</span><span class="yt-artist"></span><span class="yt-title"></span></div>
-      <div class="yt-frame"><div id="yt-player"></div></div>
-      <div class="yt-foot"><span class="muted small">Scène · clip officiel via YouTube</span><button class="btn sm ghost yt-skip" title="Extrait suivant">⏭</button></div>`;
+    el.setAttribute("aria-label", "Écran du showcase de cette boîte");
+    el.innerHTML = `<div class="yt-head"><span class="pill red">● En scène</span><b class="yt-artist"></b></div>
+      <div class="yt-title"></div><div class="yt-frame"><div id="yt-player"></div></div>
+      <div class="yt-status" role="status"></div>
+      <div class="yt-foot"><span class="muted small">Vidéo et musique · YouTube · Cette boîte uniquement</span><button class="btn sm gold yt-resume hidden">Activer le clip et le son</button></div>`;
     document.body.appendChild(el);
-    el.querySelector(".yt-skip").onclick = () => this.finish("skip");
     this.el = el;
+    el.querySelector(".yt-resume").onclick = () => this.tryResume();
     return el;
   }
 
-  async ensurePlayer() {
+  ensurePlayer() {
     this.mount();
-    if (this.player) return this.readyPromise;
-    const YT = await loadApi();
-    this.readyPromise = new Promise((resolve) => {
+    if (this.readyPromise) return this.readyPromise;
+    this.readyPromise = loadApi().then((YT) => new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Lecteur YouTube indisponible")), 15000);
       this.player = new YT.Player("yt-player", {
-        width: 356, height: 200,
-        playerVars: { autoplay: 0, controls: 1, rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3, origin: location.origin },
+        host: "https://www.youtube-nocookie.com",
+        videoId: this.current?.videoId,
+        width: "100%", height: "100%",
+        playerVars: { autoplay: 0, controls: 1, rel: 0, playsinline: 1, origin: location.origin },
         events: {
-          onReady: () => { try { this.player.setVolume(Math.round(this.volume * 100)); } catch {} resolve(this.player); },
-          onStateChange: (e) => this.handleState(e.data),
+          onReady: (event) => { clearTimeout(timeout); resolve(event.target); },
+          onStateChange: (event) => {
+            if (!this.current) return;
+            if (event.data === YT.PlayerState.PLAYING) {
+              clearTimeout(this.watchTimer);
+              this.blocked = false;
+              this.current.started = true;
+              this.el.querySelector(".yt-status").textContent = "";
+              this.el.querySelector(".yt-resume").classList.add("hidden");
+              this.onPlaying?.();
+            } else if (event.data === YT.PlayerState.ENDED) this.finish("ended");
+          },
+          onAutoplayBlocked: () => this.showBlocked(),
           onError: () => this.finish("error"),
         },
       });
+    })).catch((error) => {
+      this.player?.destroy?.();
+      this.player = null;
+      this.readyPromise = null;
+      this.el.querySelector(".yt-frame").innerHTML = '<div id="yt-player"></div>';
+      throw error;
     });
     return this.readyPromise;
   }
 
-  handleState(state) {
-    const YT = window.YT;
-    if (!YT || !this.current) return;
-    if (state === YT.PlayerState.PLAYING) {
-      clearTimeout(this.watchTimer);
-      this.blocked = false;
-      if (!this.current.started) {
-        this.current.started = true;
-        this.updateTitle();
-        if (this.onPlaying) this.onPlaying();
-        const seconds = Number(this.current.seconds || 0);
-        if (seconds > 0) {
-          clearTimeout(this.clipTimer);
-          this.clipTimer = setTimeout(() => this.finish("clip"), Math.max(3, seconds - 1.5) * 1000);
-        }
-      }
-    } else if (state === YT.PlayerState.ENDED) {
-      this.finish("ended");
+  async playClip(opts) {
+    this.stop(0);
+    const current = { ...opts, token: Symbol("video"), started: false };
+    this.current = current;
+    this.volume = opts.volume ?? this.volume;
+    this.mount();
+    this.el.classList.remove("hidden");
+    this.el.querySelector(".yt-frame").classList.remove("hidden");
+    this.el.querySelector(".yt-artist").textContent = opts.artist || "";
+    this.el.querySelector(".yt-title").textContent = opts.title || "";
+    this.el.querySelector(".yt-status").textContent = "Connexion à la scène YouTube…";
+    try {
+      const player = await this.ensurePlayer();
+      if (this.current !== current) return;
+      player.setVolume(Math.round(this.volume * 100));
+      if (this.volume > 0) player.unMute(); else player.mute();
+      player.loadVideoById({ videoId: opts.videoId, startSeconds: opts.getStart?.() ?? opts.start ?? 0 });
+      this.watchTimer = setTimeout(() => { if (this.current === current && !current.started) this.showBlocked(); }, 4000);
+    } catch (error) {
+      console.warn("Lecteur showcase YouTube :", error);
+      if (this.current === current) this.finish("unavailable");
     }
   }
 
-  updateTitle() {
-    if (!this.el || !this.player) return;
+  showBlocked() {
+    if (!this.current) return;
+    this.blocked = true;
+    this.el.querySelector(".yt-status").textContent = "Clique pour rejoindre le clip avec la musique.";
+    const button = this.el.querySelector(".yt-resume");
+    button.classList.remove("hidden");
+    button.textContent = "Activer le clip et le son";
+    button.onclick = () => this.tryResume();
+    this.onBlocked?.();
+  }
+
+  tryResume() {
+    if (!this.blocked || !this.player || !this.current) return;
     try {
-      const data = this.player.getVideoData();
-      const t = this.el.querySelector(".yt-title");
-      if (data && data.title) t.textContent = data.title;
+      if (this.current.getStart) this.player.seekTo(this.current.getStart(), true);
+      this.player.setVolume(Math.round(this.volume * 100));
+      if (this.volume > 0) this.player.unMute();
+      this.player.playVideo();
     } catch {}
   }
 
-  /**
-   * Joue un extrait. { videoId, start, seconds, volume, artist, title, onEnded }
-   * onEnded est appelé quand l'extrait se termine (durée, fin de vidéo, erreur, skip).
-   */
-  async playClip(opts) {
-    const token = Symbol("yt");
-    this.current = { token, onEnded: opts.onEnded, seconds: opts.seconds, started: false };
-    this.volume = Math.max(0, Math.min(1, opts.volume ?? this.volume));
-    try {
-      await this.ensurePlayer();
-    } catch (e) {
-      console.warn("YouTube", e);
-      const cur = this.current; this.current = null;
-      if (cur && cur.token === token && cur.onEnded) cur.onEnded("unavailable");
-      return;
-    }
-    if (!this.current || this.current.token !== token) return;
+  showMessage(artist, message, retry) {
+    this.stop(0);
+    this.mount();
     this.el.classList.remove("hidden");
-    this.el.querySelector(".yt-artist").textContent = opts.artist || "";
-    this.el.querySelector(".yt-title").textContent = opts.title || "";
-    clearInterval(this.fadeTimer);
-    try {
-      this.player.setVolume(Math.round(this.volume * 100));
-      this.player.loadVideoById({ videoId: opts.videoId, startSeconds: Math.max(0, Number(opts.start) || 0) });
-    } catch (e) {
-      this.finish("error");
-      return;
-    }
-    // Autoplay bloqué ? (l'état ne passe jamais à PLAYING)
-    clearTimeout(this.watchTimer);
-    this.watchTimer = setTimeout(() => {
-      if (this.current && this.current.token === token && !this.current.started) {
-        this.blocked = true;
-        if (this.onBlocked) this.onBlocked();
-      }
-    }, 6000);
-  }
-
-  /** À appeler dans un geste utilisateur si l'autoplay a été bloqué. */
-  tryResume() {
-    if (!this.blocked || !this.player || !this.current) return;
-    try { this.player.playVideo(); } catch {}
+    this.el.querySelector(".yt-artist").textContent = artist;
+    this.el.querySelector(".yt-title").textContent = "";
+    this.el.querySelector(".yt-frame").classList.add("hidden");
+    this.el.querySelector(".yt-status").textContent = message;
+    const button = this.el.querySelector(".yt-resume");
+    button.classList.toggle("hidden", !retry);
+    button.textContent = "Réessayer le clip";
+    button.onclick = retry || (() => {});
   }
 
   finish(reason) {
-    const cur = this.current;
-    if (!cur) return;
-    clearTimeout(this.clipTimer);
-    clearTimeout(this.watchTimer);
-    this.current = null;
-    this.fadeTo(0, 1.2, () => { try { this.player && this.player.pauseVideo(); } catch {} });
-    if (cur.onEnded) cur.onEnded(reason);
+    const callback = this.current?.onEnded;
+    this.stop(0);
+    callback?.(reason);
   }
 
-  fadeTo(target, seconds, done) {
-    clearInterval(this.fadeTimer);
-    if (!this.player) { if (done) done(); return; }
-    let v; try { v = this.player.getVolume() / 100; } catch { v = this.volume; }
-    const steps = Math.max(1, Math.round(seconds / 0.06));
-    const delta = (target - v) / steps;
-    let i = 0;
-    this.fadeTimer = setInterval(() => {
-      i += 1; v += delta;
-      try { this.player.setVolume(Math.round(Math.max(0, Math.min(1, v)) * 100)); } catch {}
-      if (i >= steps) { clearInterval(this.fadeTimer); this.fadeTimer = null; if (done) done(); }
-    }, 60);
+  setVolume(value) {
+    this.volume = Math.max(0, Math.min(1, value));
+    if (!this.current) return;
+    try {
+      this.player?.setVolume(Math.round(this.volume * 100));
+      if (this.volume > 0) this.player?.unMute(); else this.player?.mute();
+    } catch {}
   }
 
-  setVolume(v) {
-    this.volume = Math.max(0, Math.min(1, v));
-    if (this.player && this.current && !this.fadeTimer) { try { this.player.setVolume(Math.round(this.volume * 100)); } catch {} }
-  }
-
-  /** Arrêt immédiat (fondu court) et masquage de l'écran de scène. */
-  stop(fade = 0.35) {
-    clearTimeout(this.clipTimer);
+  stop() {
     clearTimeout(this.watchTimer);
     this.current = null;
     this.blocked = false;
-    if (this.player) {
-      this.fadeTo(0, fade, () => {
-        try { this.player.pauseVideo(); } catch {}
-        try { this.player.setVolume(Math.round(this.volume * 100)); } catch {}
-      });
-    }
-    if (this.el) this.el.classList.add("hidden");
+    try { this.player?.pauseVideo(); } catch {}
+    this.el?.classList.add("hidden");
+    this.el?.querySelector(".yt-resume").classList.add("hidden");
   }
 
   get active() { return !!this.current; }

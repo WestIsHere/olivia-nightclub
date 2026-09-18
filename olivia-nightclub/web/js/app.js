@@ -4,6 +4,7 @@
    La vérité est côté serveur : le client ne fait qu'afficher.
    ========================================================== */
 
+import { icon } from "./design.js";
 import * as pages from "./pages.js";
 import { audio } from "./audio.js";
 
@@ -125,41 +126,55 @@ function parseRoute() {
 export async function render() {
   const app = document.getElementById("app");
   if (!S.state) {
+    document.body.classList.remove("nav-open");
+    app.className = "auth-shell";
     app.innerHTML = "";
     pages.login(app);
     return;
   }
   if (!S.state.club) {
+    document.body.classList.remove("nav-open");
+    app.className = "auth-shell";
     app.innerHTML = "";
     pages.createClub(app);
     return;
   }
   S.route = parseRoute();
+  const targetClub = S.route.name === "club" ? S.state.user.id : S.route.name === "visit" ? Number(S.route.params.id) : null;
+  if (targetClub == null || targetClub !== audio.activeClubView) audio.setView(null);
   const page = pages[S.route.name] || pages.city;
   // État local trop ancien (autre onglet, longue inactivité) → on le rafraîchit avant d'afficher.
   if (S.state.server_time && now() - S.state.server_time > 20) {
     try { await refresh(); } catch { return; }
   }
   if (!document.getElementById("view")) {
-    app.innerHTML = `<div class="topbar" id="topbar"></div><nav class="mainnav" id="mainnav"></nav><main id="view"></main>`;
+    app.className = "game-shell";
+    app.innerHTML = `<a class="skip-link" href="#view">Aller au contenu</a><header class="topbar" id="topbar"></header><nav class="mainnav" id="mainnav" aria-label="Navigation du jeu"></nav><button class="nav-scrim" aria-label="Fermer le menu"></button><main id="view" tabindex="-1"></main><footer class="app-footer"><span>OLIVIA <small>NIGHTCLUB</small></span><span>Music · People · Memories</span><span>Votre nuit. Vos règles.</span></footer>`;
+    app.querySelector(".nav-scrim").onclick = () => setMenu(false);
+    app.querySelector(".skip-link").onclick = (e) => { e.preventDefault(); document.getElementById("view").focus(); };
   }
   renderTopbar();
   renderNav();
   const view = document.getElementById("view");
-  view.innerHTML = `<div class="muted small" style="padding:30px;text-align:center">Chargement…</div>`;
+  const fromMobileMenu = document.body.classList.contains("nav-open");
+  view.dataset.page = S.route.name;
+  setMenu(false);
+  view.innerHTML = `<div class="page-loading" role="status"><span></span>La nuit se prépare…</div>`;
   // Contexte audio : seules les pages "Ma boîte" et "Visite" définissent une vue de club.
-  if (!["club", "visit"].includes(S.route.name)) audio.setView(null);
   try {
     await page(view, S.route.params);
   } catch (e) {
+    audio.setView(null);
     console.error(e);
     view.innerHTML = `<div class="panel accent-red"><h3>Erreur</h3><p>${esc(e.message || e)}</p></div>`;
   }
   window.scrollTo({ top: 0 });
+  if (fromMobileMenu) view.focus({ preventScroll: true });
 }
 
 // ---------------- Audio : préférences, manifeste, alerte braquage ----------------
 export async function initAudio(state) {
+  audio.screen.fetchScreen = (id) => api(`/api/clubs/${id}/showcase`);
   audio.onSave = (prefs) => api("/api/me/audio", { method: "PUT", body: { prefs } }).catch(() => {});
   audio.onStateChange = () => renderAudioControls();
   if (state?.user?.audio_prefs) audio.setPrefs(state.user.audio_prefs, { persist: false });
@@ -171,8 +186,8 @@ export function renderAudioControls() {
   const el = document.getElementById("audio-controls");
   if (!el) return;
   const st = audio.status();
-  el.innerHTML = `${st.blocked ? `<button class="btn sm gold" id="audio-unlock">🔊 Activer le son</button>` : ""}
-    <button class="iconbtn" id="audio-mute" title="${st.muted ? "Réactiver le son" : "Couper le son"}">${st.muted ? "🔇" : "🔊"}</button>`;
+  el.innerHTML = `${st.blocked ? `<button class="btn sm gold" id="audio-unlock">Activer le son</button>` : ""}
+    <button class="iconbtn" id="audio-mute" title="${st.muted ? "Réactiver le son" : "Couper le son"}">${icon(st.muted ? "mute" : "sound")}</button>`;
   const unlock = el.querySelector("#audio-unlock");
   if (unlock) unlock.onclick = () => audio.unlock();
   el.querySelector("#audio-mute").onclick = () => { audio.toggleMute(); renderAudioControls(); };
@@ -199,38 +214,43 @@ export function renderTopbar() {
   const c = S.state.club, d = S.state.derived;
   const statusTone = { "COMPLET": "gold", "TRÈS ACTIF": "green", "SHOWCASE EN COURS": "violet", "ÉVÉNEMENT EN COURS": "red", "CALME": "", "OUVERT": "cyan" }[d.status] || "";
   el.innerHTML = `
-    <div class="brand" onclick="location.hash='#/city'"><span class="logo">OLIVIA</span><span class="sub">Nightclubs</span></div>
+    <button class="iconbtn menu-toggle" id="menu-toggle" aria-controls="mainnav" aria-expanded="${document.body.classList.contains('nav-open')}" aria-label="Ouvrir le menu">${icon("menu")}</button>
+    <a class="mobile-brand" href="#/city">OLIVIA</a>
+    <div class="header-club"><span class="live-dot"></span><div><span class="eyebrow">Votre établissement</span><a href="#/club">${esc(c.name)}</a></div></div>
     <div class="stats-strip">
-      <div class="stat-chip cash" id="chip-cash"><span class="k">Trésorerie</span><span class="v">${money(c.cash)}</span></div>
-      <div class="stat-chip"><span class="k">Clients</span><span class="v">${num(c.last_clients)}</span></div>
-      <div class="stat-chip"><span class="k">VIP</span><span class="v">${num(c.last_vips)}</span></div>
-      <div class="stat-chip"><span class="k">Niveau</span><span class="v">${c.level} · ${esc(d.level_name)}</span></div>
-      <div class="stat-chip status"><span class="k">Statut</span><span class="v ${statusTone}">${esc(d.status)}</span></div>
+      <a href="#/finances" class="stat-chip cash" id="chip-cash"><span class="k">Trésorerie</span><span class="v">${money(c.cash)}</span></a>
+      <a href="#/levels" class="stat-chip standing"><span class="k">Standing · niveau ${c.level}</span><span class="v">${esc(d.level_name)}</span></a>
       <div class="stat-chip timer"><span class="k">Prochain service</span><span class="v" id="timer">--:--</span></div>
     </div>
-    <div class="icons">
-      <span id="audio-controls" class="row" style="gap:6px"></span>
-      <button class="iconbtn" title="Banque & trades" onclick="location.hash='#/bank'">🏦${S.pendingTrades ? `<span class="badge">${S.pendingTrades}</span>` : ""}</button>
-      <button class="iconbtn" title="Notifications" onclick="location.hash='#/notifications'">🔔${S.unread ? `<span class="badge">${S.unread > 99 ? "99+" : S.unread}</span>` : ""}</button>
-      <button class="iconbtn" title="Profil" onclick="location.hash='#/profile/${S.state.user.id}'">${esc(S.state.user.avatar)}</button>
-      <button class="iconbtn" title="Paramètres" onclick="location.hash='#/settings'">⚙</button>
+    <div class="icons"><span id="audio-controls" class="row" style="gap:6px"></span>
+      <a class="iconbtn" aria-label="Banque et échanges" title="Banque et échanges" href="#/bank">${icon("bank")}${S.pendingTrades ? `<span class="badge">${S.pendingTrades}</span>` : ""}</a>
+      <a class="iconbtn" aria-label="Notifications" title="Notifications" href="#/notifications">${icon("notifications")}${S.unread ? `<span class="badge">${S.unread > 99 ? "99+" : S.unread}</span>` : ""}</a>
+      <a class="iconbtn profile-button" aria-label="Mon profil" title="Mon profil" href="#/profile/${S.state.user.id}">${esc(S.state.user.avatar)}</a>
     </div>`;
+  el.querySelector("#menu-toggle").onclick = () => setMenu(!document.body.classList.contains("nav-open"));
   renderAudioControls();
   tickTimer();
 }
 
 const NAV = [
-  ["city", "🏙️ Ville"], ["club", "♣ Ma boîte"], ["dashboard", "Direction"], ["finances", "Finances"],
-  ["showcases", "Showcases"], ["equipment", "Équipements"], ["manager", "Manager"], ["activities", "Activités"],
-  ["shop", "Boutique"], ["bank", "Banque"], ["leaderboard", "Classement"], ["settings", "Paramètres"],
+  ["LA NUIT", [["city", "La ville"], ["club", "Mon club"], ["showcases", "Showcases"], ["activities", "Activités"]]],
+  ["MON ÉTABLISSEMENT", [["dashboard", "Direction"], ["finances", "Finances"], ["equipment", "Équipements"], ["manager", "Manager"], ["levels", "Progression"]]],
+  ["MON UNIVERS", [["shop", "Boutique"], ["bank", "Banque & échanges"], ["leaderboard", "Classement"], ["profile", "Mon profil"], ["notifications", "Notifications"], ["settings", "Paramètres"]]],
 ];
+function setMenu(open) {
+  document.body.classList.toggle("nav-open", open);
+  document.getElementById("menu-toggle")?.setAttribute("aria-expanded", String(open));
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
 function renderNav() {
   const el = document.getElementById("mainnav");
   if (!el) return;
   const cur = S.route.name;
-  el.innerHTML = NAV.map(([k, l]) => `<a href="#/${k}" class="${cur === k ? "active" : ""}">${l}</a>`).join("")
-    + (S.state.user.is_admin ? `<a href="#/admin" class="${cur === "admin" ? "active" : ""}">⚙ Admin</a>` : "")
-    + `<a href="#" id="logout" style="margin-left:auto">Déconnexion</a>`;
+  const link = (k,l) => `<a href="#/${k}" class="${cur === k ? "active" : ""}" ${cur === k ? 'aria-current="page"' : ''}>${icon(k)}<span>${l}</span>${cur === k ? '<i class="nav-active-dot"></i>' : ''}</a>`;
+  el.innerHTML = `<a class="brand" href="#/city"><span class="logo">OLIVIA</span><span class="sub">NIGHTCLUB</span></a><div class="nav-links">`
+    + NAV.map(([label, entries]) => `<div class="nav-group"><div class="nav-label">${label}</div>${entries.map(([k,l]) => link(k,l)).join("")}</div>`).join("")
+    + (S.state.user.is_admin ? `<div class="nav-group">${link("admin", "Administration")}</div>` : "")
+    + `</div><div class="nav-bottom"><span class="night-signature">More than a night</span><a href="#" id="logout">${icon("logout")}<span>Déconnexion</span></a></div>`;
   el.querySelector("#logout").onclick = async (e) => {
     e.preventDefault();
     await api("/api/auth/logout", { method: "POST" });
@@ -285,6 +305,10 @@ export function overlay(html, { cls = "", closable = true } = {}) {
   const el = document.createElement("div");
   el.className = `overlay ${cls}`;
   el.innerHTML = `<div class="box">${html}</div>`;
+  const dialog = el.querySelector(".box");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", dialog.querySelector("h2")?.textContent || "Information Olivia");
   const close = () => el.remove();
   if (closable) el.addEventListener("click", (e) => { if (e.target === el) close(); });
   el.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
@@ -374,6 +398,7 @@ export function showEventBanner(ev) {
 export function connectSSE() {
   disconnectSSE();
   const es = new EventSource("/api/events");
+  es.addEventListener("open", () => audio.screen.poll());
   S.sse = es;
   es.addEventListener("service", (e) => {
     const r = JSON.parse(e.data);

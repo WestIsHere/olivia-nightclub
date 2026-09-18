@@ -1,0 +1,48 @@
+// Small, local outline icon set. No external icon service is required.
+const paths = {
+  city: '<path d="M3 21V8l6-3v16M9 21V3l7 3v15M16 10h5v11M1 21h22M5 10h1m-1 4h1m6-6h1m-1 4h1m-1 4h1m6-2h1"/>',
+  club: '<path d="M3 21V9l9-6 9 6v12H3Zm6 0v-8h6v8M7 8h10"/>',
+  dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="11" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="18" width="7" height="3" rx="1"/>',
+  finances: '<path d="M3 3v18h18M7 15l4-5 4 3 6-8"/>',
+  showcases: '<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/>',
+  equipment: '<rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="15" r="4"/><circle cx="12" cy="6" r="1"/>',
+  manager: '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2M9 15l3 3 3-3m-3 3v3"/>',
+  activities: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01" stroke-width="3"/>',
+  shop: '<path d="M4 7h16l1 14H3L4 7ZM8 7V5a4 4 0 0 1 8 0v2"/>',
+  bank: '<path d="m2 7 10-5 10 5H2Zm2 4v7m5-7v7m6-7v7m5-7v7M2 21h20"/>',
+  leaderboard: '<path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H3v3a4 4 0 0 0 5 4m8-7h5v3a4 4 0 0 1-5 4m-4 1v5m-4 3h8m-6-3h4"/>',
+  levels: '<path d="m3 8 4 4 5-8 5 8 4-4-3 12H6L3 8Zm4 9h10"/>',
+  profile: '<circle cx="12" cy="8" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/>',
+  notifications: '<path d="M18 8a6 6 0 0 0-12 0c0 8-3 8-3 10h18c0-2-3-2-3-10M10 22h4"/>',
+  settings: '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/>',
+  admin: '<path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6l8-4Zm-4 9 3 3 5-6"/>',
+  music: '<path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="17" cy="16" rx="3" ry="3"/>',
+  sound: '<path d="m11 4-6 5H2v6h3l6 5V4Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+  mute: '<path d="m11 4-6 5H2v6h3l6 5V4Zm5 5 6 6m0-6-6 6"/>',
+  arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+  logout: '<path d="M10 3H3v18h7m4-14 5 5-5 5m-6-5h11"/>',
+  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  moon: '<path d="M21 13A9 9 0 0 1 11 3 9 9 0 1 0 21 13Z"/>',
+  watch: '<rect x="6" y="6" width="12" height="12" rx="4"/><path d="M9 6V2h6v4M9 18v4h6v-4m-3-13v3l2 2"/>',
+  car: '<path d="m4 10 2-6h12l2 6M3 18v3m18-3v3M2 10h20v8H2v-8Zm3 4h3m8 0h3"/>',
+};
+export function icon(name, cls = '') {
+  return `<svg class="ui-icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.club}</svg>`;
+}
+export const pageNotes = {
+  dashboard: 'Tout ce qui fait vibrer votre établissement, en un regard.',
+  finances: 'Chaque nuit compte. Chaque décision aussi.',
+  showcases: 'Les plus grands noms. Votre scène. Une nuit mémorable.',
+  equipment: 'Le son, la lumière et les détails qui changent tout.',
+  manager: 'Entourez-vous de ceux qui feront grandir votre club.',
+  activities: 'La nuit vous réserve encore quelques surprises.',
+  shop: 'Les belles pièces se collectionnent.',
+  bank: 'Faites circuler les opportunités dans la ville.',
+  leaderboard: 'Les adresses qui font parler d’elles.',
+  levels: 'D’une première soirée à une adresse légendaire.',
+  profile: 'Une signature. Un établissement. Votre histoire.',
+  notifications: 'Les nouvelles de votre vie nocturne.',
+  settings: 'Composez votre expérience Olivia.',
+  admin: 'Les coulisses de la ville.',
+  club: 'Bienvenue chez vous. La nuit vous appartient.',
+};

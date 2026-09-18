@@ -1,7 +1,8 @@
 """
 GAME_CONFIG — configuration économique centralisée.
 
-TOUTES les valeurs viennent du bot Discord (nightclub_v35 + flex.py).
+Les valeurs de base viennent du bot Discord (nightclub_v35 + flex.py),
+avec un catalogue rap 2016–2026 étendu et rééquilibré pour le jeu web.
 Rien n'est hardcodé dans le frontend : le client reçoit la partie publique
 de cette configuration via l'API, et l'administrateur peut surcharger
 n'importe quelle valeur depuis le panneau admin (stocké en base).
@@ -11,6 +12,8 @@ regroupées dans la clé "web" (ex : blackjack interactif).
 """
 
 import copy
+from .artists import RAP_ARTISTS, RAP_PHRASES
+from .showcase_media import DEFAULT_VIDEOS
 
 # ------------------------------------------------------------------
 # Artistes : bonus d'entrées (ARTIST_SHOWCASE_BONUS) + ordre d'affichage
@@ -239,8 +242,9 @@ DEFAULT_CONFIG = {
     },
 
     # ---------------- Showcases ----------------
-    "artists": {name: {"bonus": bonus} for name, bonus in ARTIST_SHOWCASE_BONUS.items()},
-    "artist_order": list(ARTIST_ORDER),
+    "artists": {**{name: {"bonus": bonus} for name, bonus in ARTIST_SHOWCASE_BONUS.items()},
+                **RAP_ARTISTS},
+    "artist_order": list(ARTIST_ORDER) + [name for name in RAP_ARTISTS if name not in ARTIST_ORDER],
     "artist_default_bonus": 0.20,
     # showcase_cost_for_artist : paliers [bonus_min, prix] puis prix plancher
     "showcase_cost_tiers": [[0.50, 25_000], [0.40, 22_500], [0.30, 20_000], [0.20, 17_500]],
@@ -248,7 +252,7 @@ DEFAULT_CONFIG = {
     "artist_cooldown_services": 2,      # un même artiste : 2 services complets
     "showcase_clients_mult": 2,         # "Tous les showcases rapportent x2 clients"
     "showcase_income_mult": 2,          # "Tous les services avec showcase rapportent x2 d'argent"
-    "showcase_phrases": SHOWCASE_PHRASES,
+    "showcase_phrases": {**SHOWCASE_PHRASES, **RAP_PHRASES},
     "showcase_default_phrase": ["{artist} a mis une grosse ambiance pendant son showcase.", 20, 60],
 
     # Événements spéciaux de showcase
@@ -420,6 +424,7 @@ DEFAULT_CONFIG = {
         # Showcases via le lecteur YouTube officiel (IFrame Player API) : extraits de clips
         # officiels joués dans la vue du club. Pas de téléchargement, lecteur visible (règles YouTube).
         "youtube_enabled": True,
+        "showcase_videos": DEFAULT_VIDEOS,
         "youtube_clip_seconds": 30,          # durée d'un extrait (0 = vidéo entière)
         "youtube_start_range": [20, 75],     # départ aléatoire dans la vidéo (secondes)
         # Préférences par défaut d'un nouveau joueur (0..1)
@@ -460,6 +465,10 @@ def build_config(overrides=None):
     cfg = copy.deepcopy(DEFAULT_CONFIG)
     if overrides:
         cfg = deep_merge(cfg, overrides)
+    # Un ancien ordre sauvegardé par l'admin ne doit pas masquer les ajouts.
+    cfg["artist_order"] = list(dict.fromkeys(
+        [a for a in cfg["artist_order"] if a in cfg["artists"]] + list(cfg["artists"])
+    ))
     return cfg
 
 
@@ -470,7 +479,7 @@ PUBLIC_KEYS = [
     "vip_roll", "levels", "entry_price_effect", "managers", "equipment",
     "artists", "artist_order", "artist_default_bonus", "showcase_cost_tiers",
     "showcase_cost_floor", "artist_cooldown_services", "showcase_clients_mult",
-    "showcase_income_mult", "showcase_phrases", "events", "activities",
+    "showcase_income_mult", "showcase_phrases", "showcase_default_phrase", "events", "activities",
     "bottle_packs", "bottle_clients_min", "bottle_clients_divisor", "robbery",
     "shop", "web", "audio",
 ]

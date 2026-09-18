@@ -78,6 +78,9 @@ def artist_bonus(cfg, artist):
 
 
 def showcase_cost_for_artist(cfg, artist):
+    price = cfg["artists"].get(artist, {}).get("cost")
+    if price is not None:
+        return int(price)
     bonus = artist_bonus(cfg, artist)
     for threshold, price in cfg["showcase_cost_tiers"]:
         if bonus >= float(threshold):

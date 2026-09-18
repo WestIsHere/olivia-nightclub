@@ -16,6 +16,7 @@
    ========================================================== */
 
 import { YouTubeStage } from "./youtube.js";
+import { ClubScreen } from "./club-screen.js";
 
 const BUSES = ["fx", "showcase", "ambient", "notifications"];
 const DEFAULT_PREFS = { master: 0.8, fx: 0.9, showcase: 0.7, ambient: 0.2, notifications: 0.6, muted: false };
@@ -44,6 +45,11 @@ export class AudioManager {
     this._saveTimer = null;
     // Écran de scène YouTube (showcases) — même règle locale que les fichiers audio.
     this.stage = new YouTubeStage();
+    this.screen = new ClubScreen(this.stage, {
+      volume: () => this.effectiveShowcaseVolume(),
+      onActive: (active) => this.duck(active),
+    });
+    this.screen.onSnapshot = (snapshot) => { this.view.showcase = snapshot; };
     this.stage.onBlocked = () => { this.needsGesture = true; this.notify(); };
     this.stage.onPlaying = () => { this.needsGesture = false; this.notify(); };
     this.loadLocalPrefs();
@@ -274,28 +280,26 @@ export class AudioManager {
 
   onShowcaseStarted(p) {
     if (p.club_id !== this.view.clubId) return;
-    this.view.showcase = { artist: p.artist, ends_at: p.ends_at };
+    this.view.showcase = p;
     this.reconcile();
   }
 
   onShowcaseEnded(p) {
     if (p.club_id !== this.view.clubId) return;
+    if (this.view.showcase?.showcase_id && this.view.showcase.showcase_id !== p.showcase_id) return;
+    this.screen.end(p);
     this.view.showcase = null;
     this.reconcile();
   }
 
   /** Réconcilie l'état audio avec la vue courante (source : setView + événements serveur). */
   reconcile() {
+    this.screen.setClub(!this.hidden ? this.view.clubId : null, this.view.showcase);
     const active = !this.hidden && this.ready() && this.view.clubId != null;
     const wantAmbient = active ? this.view.clubId : null;
     if (this.ambient.clubId !== wantAmbient) {
       this.stopAmbient();
       if (wantAmbient != null) this.startAmbient(wantAmbient);
-    }
-    const wantShow = active && this.view.showcase ? `${this.view.clubId}|${this.view.showcase.artist}` : null;
-    if (this.showcase.key !== wantShow) {
-      this.stopShowcase();
-      if (wantShow) this.startShowcase(wantShow, this.view.clubId, this.view.showcase.artist);
     }
     // On voudrait jouer (vue club) mais le navigateur attend une interaction → proposer « Activer le son ».
     if (!this.ready() && !this.hidden && this.view.clubId != null) {
@@ -314,7 +318,7 @@ export class AudioManager {
     const asset = this.pick(byLevel.length ? byLevel : list, "ambient");
     if (!asset) return;
     try {
-      const handle = await this.playAsset(asset, "ambient", { volume: this.showcase.handle ? this.settings.ducking : 1, loop: true, fadeIn: 1.2 });
+      const handle = await this.playAsset(asset, "ambient", { volume: this.stage.active ? this.settings.ducking : 1, loop: true, fadeIn: 1.2 });
       if (this.ambient.token !== token) { handle?.stop(0.2); return; }
       this.ambient.handle = handle;
     } catch {}
@@ -327,62 +331,6 @@ export class AudioManager {
 
   duck(on) {
     if (this.ambient.handle) this.ambient.handle.setVolume(on ? this.settings.ducking : 1, on ? 0.6 : 2.0);
-  }
-
-  // ---------------- showcase (local à la vue) ----------------
-  startShowcase(key, clubId, artist) {
-    const token = Symbol("show");
-    this.showcase = { key, token, handle: null, timer: null, artist, clubId };
-    this.nextClip(token);
-  }
-
-  async nextClip(token) {
-    if (this.showcase.token !== token) return;
-    const { list, key } = this.showcaseAssets(this.showcase.artist);
-    const asset = this.pick(list, `show:${key}`);
-    if (!asset) return;
-    if (asset.type === "youtube") {
-      // Extrait d'un clip officiel via le lecteur YouTube (écran de scène visible).
-      const [lo, hi] = this.settings.youtube_start_range || [20, 75];
-      const start = lo + Math.random() * Math.max(0, hi - lo);
-      this.showcase.handle = { youtube: true, stop: (f) => this.stage.stop(f) };
-      this.duck(true);
-      this.stage.playClip({
-        videoId: asset.video_id, start, seconds: this.settings.youtube_clip_seconds ?? asset.duration ?? 30,
-        volume: this.effectiveShowcaseVolume(), artist: this.showcase.artist, title: asset.title,
-        onEnded: (reason) => {
-          if (this.showcase.token !== token) return;
-          this.showcase.handle = null;
-          this.duck(false);
-          const [glo, ghi] = this.settings.clip_gap;
-          const gap = reason === "unavailable" || reason === "error" ? 1500 : (glo + Math.random() * Math.max(0, ghi - glo)) * 1000;
-          this.showcase.timer = setTimeout(() => this.nextClip(token), gap);
-        },
-      });
-      return;
-    }
-    let handle = null;
-    try { handle = await this.playAsset(asset, "showcase", { volume: 1, fadeIn: 0.5 }); } catch {}
-    if (this.showcase.token !== token) { handle?.stop(0.2); return; }
-    if (!handle) return;
-    this.showcase.handle = handle;
-    this.duck(true);
-    handle.ended.then(() => {
-      if (this.showcase.token !== token) return;
-      this.showcase.handle = null;
-      this.duck(false);
-      const [lo, hi] = this.settings.clip_gap;
-      const gap = (lo + Math.random() * Math.max(0, hi - lo)) * 1000;
-      this.showcase.timer = setTimeout(() => this.nextClip(token), gap);
-    });
-  }
-
-  stopShowcase() {
-    clearTimeout(this.showcase.timer);
-    if (this.showcase.handle) this.showcase.handle.stop(this.settings.fade);
-    if (this.stage.active || (this.stage.el && !this.stage.el.classList.contains("hidden"))) this.stage.stop(this.settings.fade);
-    this.duck(false);
-    this.showcase = { key: null, token: null, handle: null, timer: null, artist: null, clubId: null };
   }
 
   // ---------------- tests (page Paramètres) ----------------
@@ -401,7 +349,7 @@ export class AudioManager {
   status() {
     return {
       ready: this.ready(), blocked: this.blocked, muted: this.prefs.muted, view: this.view.clubId,
-      showcase: this.showcase.artist, ambient: this.ambient.clubId != null, queue: this.fxQueue.length,
+      showcase: this.screen.snapshot?.artist || null, ambient: this.ambient.clubId != null, queue: this.fxQueue.length,
     };
   }
 }

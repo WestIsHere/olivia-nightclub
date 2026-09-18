@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+*.sqlite3
+.git/
+.gitignore
+.claude/
+tests/
+reference/
+docs/
+data/*
+!data/.gitkeep

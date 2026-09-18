@@ -19,7 +19,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "server.app:app",
         host=os.environ.get("OLIVIA_HOST", "0.0.0.0"),
-        port=int(os.environ.get("OLIVIA_PORT", "8000")),
+        port=int(os.environ.get("OLIVIA_PORT") or os.environ.get("PORT", "8000")),
         reload=False,
         log_level="info",
     )

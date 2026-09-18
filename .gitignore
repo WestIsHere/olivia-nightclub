@@ -1,0 +1,13 @@
+**/__pycache__/
+*.py[cod]
+**/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite*
+*.log
+.env
+.env.*
+.claude/
+**/.claude/
+**/.test-deps/

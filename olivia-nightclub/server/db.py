@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS robberies (
 
 # Colonnes ajoutées après la première version (migration douce)
 MIGRATIONS = [
+    ("active_showcases", "screen_playlist", "TEXT"),
     ("users", "audio_prefs", "TEXT"),
     ("audio_assets", "kind", "TEXT NOT NULL DEFAULT 'file'"),   # 'file' | 'youtube'
     ("audio_assets", "title", "TEXT"),
@@ -507,14 +508,18 @@ class Database:
                           (json.dumps(prefs, ensure_ascii=False), user_id))
 
     # ---------------- showcases actifs (miroir pour les événements audio) ----------------
-    def start_showcase(self, club_id, artist, source, started_at, ends_at):
+    def start_showcase(self, club_id, artist, source, started_at, ends_at, playlist=None):
         self.conn.execute(
             "UPDATE active_showcases SET status='ended', ended_at=? WHERE club_id=? AND status='active'",
             (started_at, club_id))
         cur = self.conn.execute(
-            "INSERT INTO active_showcases(club_id, artist, source, started_at, ends_at, status)"
-            " VALUES(?,?,?,?,?,'active')", (club_id, artist, source, started_at, ends_at))
+            "INSERT INTO active_showcases(club_id, artist, source, started_at, ends_at, status, screen_playlist)"
+            " VALUES(?,?,?,?,?,'active',?)", (club_id, artist, source, started_at, ends_at, json.dumps(playlist or [])))
         return cur.lastrowid
+
+    def active_showcase_for(self, club_id):
+        row = self.conn.execute("SELECT * FROM active_showcases WHERE club_id=? AND status='active' ORDER BY id DESC LIMIT 1", (club_id,)).fetchone()
+        return dict(row) if row else None
 
     def end_showcase(self, club_id, ended_at):
         rows = self.conn.execute(

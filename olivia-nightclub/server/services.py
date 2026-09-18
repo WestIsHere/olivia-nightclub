@@ -19,6 +19,7 @@ import time
 
 from . import audio as audio_assets
 from . import engine
+from .showcase_media import choose_playlist, screen_payload
 from .config import build_config, public_config
 from .db import Database, LOCK
 
@@ -121,8 +122,13 @@ def feed(icon, text, kind, user_id=None):
 # ------------------------------------------------------------------
 
 def showcase_started(club_id, club, artist, source, started_at, ends_at):
-    sid = db.start_showcase(club_id, artist, source, started_at, ends_at)
+    previous = club.setdefault("last_showcase_videos", {})
+    playlist = choose_playlist(cfg(), artist, db.list_audio_assets(), previous.get(artist))
+    if playlist:
+        previous[artist] = playlist[0]["video_id"]
+    sid = db.start_showcase(club_id, artist, source, started_at, ends_at, playlist)
     hub.broadcast("showcase_started", {
+        **(screen_payload(db.active_showcase_for(club_id), started_at) or {}),
         "showcase_id": sid, "club_id": club_id, "club_name": club.get("name"), "artist": artist,
         "source": source, "started_at": started_at, "ends_at": ends_at,
     })
@@ -277,6 +283,7 @@ def public_club_view(entry, now=None):
         "equipment_count": len(club.get("equipment", []) or []),
         "showcase_pending": bool(club.get("showcase_pending")),
         "showcase_artist": club.get("showcase_artist") if club.get("showcase_pending") else None,
+        "showcase_screen": club_screen(entry["user_id"], now)["showcase"],
         "last_showcase": {"artist": last_show.get("artist"), "clients": last_show.get("clients"),
                           "time": last_show.get("time")} if last_show else None,
         "last_event": {"title": last_event.get("title"), "time": last_event.get("time")} if last_event else None,
@@ -387,6 +394,7 @@ def build_state(user, with_recap=False):
     return {
         "user": public_user(user),
         "club": club,
+        "showcase_screen": club_screen(user["id"], now)["showcase"],
         "slot": slot,
         "derived": derived_for(club),
         "config": public_config(cfg()),
@@ -462,6 +470,19 @@ def active_showcases():
     with LOCK:
         rows = db.list_active_showcases()
     return rows
+
+
+def club_screen(club_id, now=None):
+    now = time.time() if now is None else now
+    with LOCK:
+        row = db.active_showcase_for(club_id)
+        # Les showcases commencés avant la migration reçoivent un programme unique.
+        if row and row.get("screen_playlist") is None and row["ends_at"] > now:
+            playlist = choose_playlist(cfg(), row["artist"], db.list_audio_assets())
+            row["screen_playlist"] = json.dumps(playlist)
+            db.conn.execute("UPDATE active_showcases SET screen_playlist=? WHERE id=?", (row["screen_playlist"], row["id"]))
+        screen = screen_payload(row, now) if cfg().get("audio", {}).get("youtube_enabled", True) else None
+    return {"server_time": now, "showcase": screen}
 
 
 # ------------------------------------------------------------------
@@ -1069,13 +1090,12 @@ def finances_view(user):
 AVATARS = ["♣", "♠", "♛", "♚", "★", "◆", "☾", "⚡", "🔥", "🖤", "💎", "👑"]
 
 
-def register(username, display_name, password_hash, club_name):
+def register(username, display_name, password_hash, club_name, *, is_admin=False):
     with LOCK:
         db.begin()
         try:
             if db.get_user_by_username(username):
                 raise GameError("TAKEN", "Ce nom d'utilisateur est déjà pris.")
-            is_admin = 1 if db.count_users() == 0 else 0
             avatar = RNG.choice(AVATARS)
             uid = db.create_user(username, display_name, password_hash, avatar, is_admin)
             club = engine.new_club(cfg(), club_name)
@@ -1127,6 +1147,45 @@ def delete_club(user):
 # ------------------------------------------------------------------
 # Admin
 # ------------------------------------------------------------------
+
+def admin_delete_club(admin, user_id, confirm_name):
+    """Remove only the selected club, keeping the player's login usable."""
+    if not admin.get("is_admin"):
+        raise GameError("FORBIDDEN", "Réservé à l'administration.")
+    user_id = int(user_id)
+    if user_id == admin["id"]:
+        raise GameError("SELF", "Vous ne pouvez pas supprimer votre propre boîte depuis ce panneau.")
+    with LOCK:
+        db.begin()
+        try:
+            club, _ = db.get_club(user_id)
+            if club is None:
+                raise GameError("NO_CLUB", "Cette boîte n'existe plus.")
+            if confirm_name != club["name"]:
+                raise GameError("CONFIRM", "Le nom de confirmation ne correspond pas à la boîte.")
+            ended_at = time.time()
+            ended = db.end_showcase(user_id, ended_at)
+            db.delete_club(user_id)
+            # Old services must not pollute the totals of a future new club.
+            for table in ("service_log", "transactions"):
+                db.conn.execute(f"DELETE FROM {table} WHERE user_id=?", (user_id,))
+            db.conn.execute("UPDATE trades SET status='cancelled', resolved_at=? "
+                            "WHERE (sender_id=? OR target_id=?) AND status='pending'",
+                            (time.time(), user_id, user_id))
+            notify(user_id, "admin", "♣", "Établissement supprimé",
+                   f"L'administration a supprimé {club['name']}. Vous pouvez créer une nouvelle boîte.", push=False)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+    for showcase in ended:
+        hub.broadcast("showcase_ended", {"club_id": user_id, "showcase_id": showcase["id"],
+                      "club_name": club["name"], "artist": showcase["artist"],
+                      "ended_at": ended_at, "reason": "club_deleted"})
+    hub.publish(user_id, "refresh", {"reason": "club_deleted"})
+    hub.broadcast("city", {"changed": [user_id]})
+    feed("♣", f"L'administration a fermé {club['name']}.", "close", user_id)
+    return {"deleted": club["name"], "user_id": user_id}
 
 def admin_grant(admin, user_id, amount, label="Ajustement administrateur"):
     target = db.get_user(int(user_id))

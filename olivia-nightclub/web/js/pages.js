@@ -2,8 +2,10 @@
    Pages du jeu. Chaque page : async (root, params) => void
    ========================================================== */
 
-import { S, api, act, refresh, money, num, pct, esc, now, clock, dateTime, ago, countdown, toast, overlay, confirmBox, afterLogin, navigate, renderTopbar, audio } from "./app.js";
-import { renderScene, renderMini, renderLoginVisual, LEVEL_THEMES } from "./scene.js";
+import { S, api, act, refresh, render, money, num, pct, esc, now, clock, dateTime, ago, countdown, toast, overlay, confirmBox, afterLogin, navigate, renderTopbar, audio } from "./app.js";
+import { renderScene, LEVEL_THEMES } from "./scene.js";
+
+import { icon, pageNotes } from "./design.js";
 
 // ---------------- helpers ----------------
 const cfg = () => S.state.config;
@@ -11,7 +13,7 @@ const myClub = () => S.state.club;
 const derived = () => S.state.derived;
 
 function head(title, sub, right = "") {
-  return `<div class="page-head"><div><div class="kicker">${esc(sub || "")}</div><h1>${title}</h1></div><div class="row">${right}</div></div>`;
+  return `<header class="page-head"><div><div class="kicker">OLIVIA <span>/</span> ${esc(sub || "")}</div><h1>${title}</h1><p>${pageNotes[S.route.name] || "La nuit vous appartient."}</p></div><div class="row page-actions">${right}</div><div class="page-emblem">${icon(S.route.name)}</div></header>`;
 }
 function levelPill(level, name) {
   const t = LEVEL_THEMES[Math.min(6, level)];
@@ -30,7 +32,7 @@ function bestCarName(c) {
 function sceneBlock(c, { chips = true, tag = true } = {}) {
   const d = derived();
   const view = { ...c, user_id: S.state.user.id, occupancy: d.occupancy, status: d.status, last_event: c.last_event };
-  return `<div class="scene-wrap">${renderScene(view, { config: cfg(), levelName: d.level_name, serverTime: now(), carName: bestCarName(c) })}
+  return `<div class="scene-wrap club-cinematic"><div class="cinematic-title"><div class="eyebrow">VOTRE ADRESSE · NIVEAU ${c.level}</div><h2>${esc(c.name)}</h2><span class="night-signature">More than a night</span></div>
     ${tag ? `<div class="scene-tag">${statusPill(d.status)}${levelPill(c.level, d.level_name)}${c.showcase_pending ? `<span class="pill violet">🎤 ${esc(c.showcase_artist)}</span>` : ""}</div>` : ""}
     ${chips ? `<div class="scene-overlay">
       <div class="chip">Clients<b>${num(c.last_clients)}</b></div>
@@ -38,8 +40,10 @@ function sceneBlock(c, { chips = true, tag = true } = {}) {
       <div class="chip gold">Revenu / service<b>${money(c.last_income)}</b></div>
       <div class="chip">Prochain service<b id="big-timer">${countdown(d.next_service - now())}</b></div>
     </div>` : ""}
-  </div>`;
+  </div><details class="facade-details"><summary>Voir la façade et ses améliorations <span>+</span></summary>${renderScene(view, { config: cfg(), levelName: d.level_name, serverTime: now(), carName: bestCarName(c) })}</details>`;
 }
+function designCarIcon() { return icon("car"); }
+function designWatchIcon() { return icon("watch"); }
 function stars(bonus) { const n = Math.max(1, Math.min(5, Math.round(bonus * 5))); return "★".repeat(n) + "☆".repeat(5 - n); }
 function txLabel(kind) {
   return { service: "Service", salary: "Salaire", event: "Événement", upgrade: "Amélioration", equipment: "Équipement", showcase: "Showcase",
@@ -58,29 +62,32 @@ function playerSelect(players, id = "target", selected = null) {
 // LOGIN
 // ==========================================================
 export function login(root) {
-  root.innerHTML = `<div class="login-hero"><div class="login-box">
-    <div class="login-visual">${renderLoginVisual()}
-      <div class="caption"><div class="kicker">Un serveur, des univers, des boîtes légendaires.</div>
-      <div style="font-family:var(--font-display);font-size:34px;letter-spacing:.14em;color:var(--gold2);text-shadow:0 0 20px rgba(212,175,55,.5)">OLIVIA</div>
-      <div class="muted small">Plus la trésorerie est élevée, plus la boîte attire de monde… et plus elle attire les regards.</div></div>
-    </div>
-    <div class="panel accent-gold">
-      <div class="kicker">Direction de nuit</div><h2>Bonsoir, patron.</h2>
-      <p class="muted small">Chaque joueur possède sa propre boîte, sa trésorerie et sa progression. La boîte continue de tourner même hors-ligne.</p>
+  root.innerHTML = `<div class="login-hero"><header class="landing-nav"><a class="brand" href="#"><span class="logo">OLIVIA</span><span class="sub">NIGHTCLUB</span></a><span class="landing-manifesto">MUSIC <i>·</i> PEOPLE <i>·</i> MEMORIES</span><a class="btn ghost" href="#f-login">Se connecter ${icon("arrow")}</a></header><div class="login-box">
+    <section class="login-visual"><div class="caption"><div class="eyebrow">VOTRE VILLE. VOTRE CLUB. VOTRE HISTOIRE.</div><h1>OLIVIA</h1><div class="wordmark-sub">NIGHTCLUB</div><div class="night-signature">More than a night</div><p>Des soirées inoubliables.<br>Un empire de la nuit à construire.</p><div class="login-tags"><span>${icon("music")} Showcases live</span><span>${icon("levels")} Adresses d’exception</span><span>${icon("profile")} Joueurs réels</span></div></div></section>
+    <section class="panel login-form"><div class="eyebrow">VOTRE INVITATION POUR CE SOIR</div><h2>La nuit vous attend.</h2><p class="muted small">Entrez dans votre club et écrivez la suite.</p>
       <div class="tabs"><button class="on" data-tab="login">Connexion</button><button data-tab="register">Créer ma boîte</button></div>
       <form id="f-login">
         <div class="field"><label>Utilisateur</label><input name="username" autocomplete="username" required></div>
         <div class="field"><label>Mot de passe</label><input name="password" type="password" autocomplete="current-password" required></div>
-        <button class="btn gold block lg">Ouvrir mon établissement</button><div class="error" id="err-login"></div>
+        <button class="btn gold block lg">Entrer dans le club ${icon("arrow")}</button><div class="error" id="err-login"></div>
       </form>
       <form id="f-register" class="hidden">
         <div class="field"><label>Utilisateur</label><input name="username" autocomplete="username" required placeholder="3 à 24 caractères"></div>
         <div class="field"><label>Nom affiché</label><input name="display_name" placeholder="Votre nom de patron"></div>
         <div class="field"><label>Mot de passe</label><input name="password" type="password" autocomplete="new-password" required placeholder="6 caractères minimum"></div>
         <div class="field"><label>Nom de la boîte de nuit</label><input name="club_name" required placeholder="Ex : Le Noir, Olivia Club, 700…" maxlength="40"></div>
-        <button class="btn gold block lg">♣ Créer ma boîte</button><div class="error" id="err-register"></div>
+        <label id="local-admin-option" class="local-admin-option hidden"><input name="local_admin" type="checkbox"> Activer mon accès administrateur sur cet ordinateur</label>
+        <button class="btn gold block lg">Créer mon établissement ${icon("arrow")}</button><div class="error" id="err-register"></div>
       </form>
-    </div></div></div>`;
+    </section></div><footer class="landing-footer"><span>OLIVIA NIGHTCLUB</span><span>Votre club continue de vivre, même hors-ligne.</span><span>Music · People · Memories</span></footer></div>`;
+  api("/api/auth/local-admin").then(({ available }) => {
+    root.querySelector("#local-admin-option")?.classList.toggle("hidden", !available);
+  }).catch(() => {});
+  root.querySelector('.landing-nav a[href="#f-login"]').onclick = (e) => {
+    e.preventDefault();
+    root.querySelector('[data-tab="login"]').click();
+    root.querySelector('#f-login input[name="username"]').focus();
+  };
   root.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
     root.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
     root.querySelector("#f-login").classList.toggle("hidden", b.dataset.tab !== "login");
@@ -98,9 +105,9 @@ export function login(root) {
 }
 
 export function createClub(root) {
-  root.innerHTML = `<div class="login-hero"><div class="panel accent-gold" style="width:min(480px,100%)">
-    <div class="kicker">Olivia — Direction de nuit</div><h2>Aucun établissement à votre nom.</h2>
-    <p class="muted small">Je peux ouvrir votre dossier et créer votre boîte de nuit immédiatement.</p>
+  root.innerHTML = `<div class="login-hero create-club-screen"><div class="brand"><span class="logo">OLIVIA</span><span class="sub">NIGHTCLUB</span></div><div class="panel accent-gold" style="width:min(480px,100%)">
+    <div class="kicker">Un nouveau chapitre</div><h2>Votre prochaine légende.</h2>
+    <p class="muted small">Vous n’avez pas encore d’établissement. Choisissez son nom et faites votre entrée dans la nuit.</p>
     <form id="f"><div class="field"><label>Nom de la boîte</label><input name="club_name" required maxlength="40"></div>
     <button class="btn gold block">♣ Créer ma boîte</button><div class="error" id="err"></div></form>
     <div class="divider"></div><a href="#" id="logout" class="small">Déconnexion</a></div></div>`;
@@ -124,10 +131,11 @@ export async function city(root) {
   for (let i = 0; i < Math.max(clubs.length, 1); i += perRow) rows.push(clubs.slice(i, i + perRow));
   const top = clubs.slice().sort((a, b) => b.cash - a.cash || b.level - a.level).slice(0, 5);
   root.innerHTML = `
-    <div class="city-head"><div class="logo-big">OLIVIA</div><div class="tag">— Nightclubs —</div><div class="slogan">Un serveur, des univers, des boîtes légendaires.</div></div>
+    <section class="city-head"><div class="city-hero-copy"><div class="eyebrow"><span class="live-dot"></span> LA VILLE S’ÉVEILLE</div><h1>La nuit<br>vous appartient.</h1><div class="night-signature">More than a night</div><p>Des adresses, des rencontres, des nuits à inventer.<br>Faites de votre club une légende.</p><div class="row"><a class="btn gold lg" href="#/club">Entrer dans mon club ${icon("arrow")}</a><a class="btn ghost lg" href="#/showcases">Les artistes à l’affiche</a></div></div><div class="city-hero-mark">OLIVIA<span>N I G H T C L U B</span></div><div class="hero-bottom"><span>${clubs.length} établissement${clubs.length > 1 ? "s" : ""} en ville</span><span>MUSIC · PEOPLE · MEMORIES</span><span>LA NUIT, ENSEMBLE</span></div></section>
+    <div class="section-heading"><div><div class="eyebrow">LE CARNET D’ADRESSES</div><h2>Ce soir en ville</h2></div><a class="text-link" href="#/leaderboard">Découvrir le classement ${icon("arrow")}</a></div>
     <div class="grid" style="grid-template-columns: minmax(0, 1fr) 320px">
       <div id="streets">
-        ${rows.map((row, ri) => `<div class="street">${row.map((c) => clubCard(c, me, data.server_time)).join("")}${Array.from({ length: Math.max(0, perRow - row.length) }, () => `<div class="lot">À louer</div>`).join("")}</div>`).join("")}
+        ${rows.map((row, ri) => `<div class="street">${row.map((c) => clubCard(c, me, data.server_time)).join("")}</div>`).join("")}
       </div>
       <div>
         <div class="panel tight"><div class="kicker">Ce soir en ville</div>
@@ -142,12 +150,11 @@ export async function city(root) {
 
 function clubCard(c, me, serverTime) {
   const mine = c.user_id === me;
-  return `<div class="club-card ${mine ? "mine" : ""}" onclick="location.hash='#/${mine ? "club" : "visit/" + c.user_id}'">
-    ${renderMini(c, { config: cfg(), levelName: c.level_name, serverTime })}
+  return `<a class="club-card ${mine ? "mine" : ""}" href="#/${mine ? "club" : "visit/" + c.user_id}"><div class="club-cover" style="background-position:${20 + (c.slot * 23) % 70}% center"><span class="cover-label">${mine ? "VOTRE ÉTABLISSEMENT" : "OLIVIA COLLECTION"}</span><span class="club-monogram">${esc(c.name.slice(0, 1))}</span></div>
     <div class="plaque"><div><div class="n">${LEVEL_THEMES[c.level].symbol || "•"} ${esc(c.name)}</div><div class="o">${esc(c.owner)}${mine ? " · vous" : ""}</div></div>
       <div><div class="c">${money(c.cash)}</div><div class="p">👤 ${num(c.last_clients)} clients · ${money(c.entry_price)}</div></div></div>
     <div class="foot">${statusPill(c.status)}${levelPill(c.level, c.level_name)}</div>
-  </div>`;
+  </a>`;
 }
 
 // ==========================================================
@@ -166,7 +173,7 @@ export async function club(root) {
     ${sceneBlock(c)}
     <div class="radial-wrap"><div class="radial">${items.map(([k, i, l, s], idx) => {
       const a = (210 + (120 / (items.length - 1)) * idx) * Math.PI / 180;
-      return `<a href="#/${k}" style="--rx:${(R * Math.cos(a)).toFixed(0)}px;--ry:${(cy + R * Math.sin(a)).toFixed(0)}px"><span class="i">${i}</span><span class="l">${l}</span><span class="s">${esc(s)}</span></a>`;
+      return `<a href="#/${k}" style="--rx:${(R * Math.cos(a)).toFixed(0)}px;--ry:${(cy + R * Math.sin(a)).toFixed(0)}px"><span class="i">${icon(k)}</span><span class="l">${l}</span><span class="s">${esc(s)}</span></a>`;
     }).join("")}</div></div>
     <div class="grid three" style="margin-top:14px">
       <div class="panel tight"><div class="kicker">Showcase</div>${c.showcase_pending ? `<div><b>🎤 ${esc(c.showcase_artist)}</b> — actif sur le prochain service</div>` : `<div class="muted">🥀 Aucun showcase en attente.</div>`}${c.last_showcase_event ? `<div class="small muted" style="margin-top:6px">Dernier : ${esc(c.last_showcase_event.artist)} (${c.last_showcase_event.clients >= 0 ? "+" : ""}${c.last_showcase_event.clients} clients)</div>` : ""}</div>
@@ -174,7 +181,7 @@ export async function club(root) {
       <div class="panel tight"><div class="kicker">Dernier événement</div>${c.last_event ? `<div><b>${esc(c.last_event.title)}</b></div><div class="small muted">${esc(c.last_event.text)}</div>` : `<div class="muted">Nuit calme pour l'instant.</div>`}</div>
     </div>`;
   // Contexte audio : je suis dans la vue de MON club → ambiance + showcase de ce club uniquement.
-  audio.setView({ clubId: S.state.user.id, level: c.level, showcase: c.showcase_pending ? { artist: c.showcase_artist, ends_at: d.next_service } : null });
+  audio.setView({ clubId: S.state.user.id, level: c.level, showcase: S.state.showcase_screen });
   root.querySelector("#rename").onclick = async () => {
     const close = overlay(`<h2>Renommer votre boîte</h2><div class="field" style="margin-top:14px"><label>Nouveau nom</label><input id="nn" value="${esc(c.name)}" maxlength="40"></div><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Annuler</button><button class="btn gold" id="ok">Renommer</button></div>`);
     document.getElementById("ok").onclick = async () => { try { await act("/api/club/rename", { name: document.getElementById("nn").value }); close(); toast({ icon: "✏️", title: "Boîte renommée", tone: "gold" }); club(root); } catch {} };
@@ -331,23 +338,36 @@ function sparkline(values) {
   const w = 1000, h = 120, max = Math.max(...values, 1);
   const step = w / Math.max(1, values.length - 1);
   const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * (h - 10) - 4).toFixed(1)}`);
-  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:120px;display:block"><defs><linearGradient id="spk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4af37" stop-opacity=".5"/><stop offset="1" stop-color="#d4af37" stop-opacity="0"/></linearGradient></defs>
-    <path d="M0,${h} L${pts.join(" L")} L${w},${h} Z" fill="url(#spk)"/><polyline points="${pts.join(" ")}" fill="none" stroke="#f3d77a" stroke-width="2"/>
-    ${values.map((v, i) => `<circle cx="${(i * step).toFixed(1)}" cy="${(h - (v / max) * (h - 10) - 4).toFixed(1)}" r="2.5" fill="#f3d77a"><title>${money(v)}</title></circle>`).join("")}</svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:120px;display:block"><defs><linearGradient id="spk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a855f7" stop-opacity=".5"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></linearGradient></defs>
+    <path d="M0,${h} L${pts.join(" L")} L${w},${h} Z" fill="url(#spk)"/><polyline points="${pts.join(" ")}" fill="none" stroke="#d9a7ff" stroke-width="2"/>
+    ${values.map((v, i) => `<circle cx="${(i * step).toFixed(1)}" cy="${(h - (v / max) * (h - 10) - 4).toFixed(1)}" r="2.5" fill="#d9a7ff"><title>${money(v)}</title></circle>`).join("")}</svg>`;
 }
 
 // ==========================================================
 // SHOWCASES
 // ==========================================================
+const showcaseFilters = { query: "", sort: "rating", affordable: false };
+const normalizeArtist = (value) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+
 export async function showcases(root) {
   const c = myClub(), d = derived(), C = cfg();
   const artists = C.artist_order;
   const discovered = new Set(d.combos_discovered);
   root.innerHTML = `
     ${head("Bureau des showcases", "Programmer un artiste")}
+    <div class="panel" style="margin-bottom:14px">
+      <div class="row between"><h3>Rap 2016–2026 · ${Object.values(C.artists).filter((a) => a.collection === "rap_2016_2026").length} artistes sélectionnés</h3><span class="pill gold">${artists.length} affiches au total</span></div>
+      <p class="muted small">Les grands noms du rap en France et de la scène francophone, groupes inclus. Notes et cachets fictifs pour le jeu, selon leur rayonnement sur la période et leur potentiel en club.</p>
+      <div class="row" style="flex-wrap:wrap;gap:12px">
+        <label>Rechercher <input id="artist-search" type="search" placeholder="Ninho, Jul, SCH…" value="${esc(showcaseFilters.query)}"></label>
+        <label>Trier <select id="artist-sort"><option value="rating">Note décroissante</option><option value="price">Prix croissant</option><option value="name">Nom A–Z</option></select></label>
+        <label><input id="artist-affordable" type="checkbox" ${showcaseFilters.affordable ? "checked" : ""}> Dans mon budget</label>
+        <span id="artist-count" class="muted small" aria-live="polite"></span>
+      </div>
+    </div>
     ${c.showcase_pending ? `<div class="panel accent-violet" style="margin-bottom:14px"><div class="row between"><div><div class="kicker">Showcase programmé</div><h2>🎤 ${esc(c.showcase_artist)}</h2><div class="muted small">Le bonus est appliqué automatiquement au prochain service (<span id="big-timer">${countdown(d.next_service - now())}</span>). Tous les showcases donnent x${C.showcase_clients_mult} clients de showcase et x${C.showcase_income_mult} revenus sur le service.</div></div><div class="num violet" style="font-size:30px">+${Math.round(c.showcase_bonus * 100)} %</div></div></div>` : `<div class="notice gold" style="margin-bottom:14px">Effet : bonus artiste sur les entrées + bonus de standing (<b>${pct(d.showcase_mult - 1)}</b> au niveau ${c.level}) — et <b>x${C.showcase_income_mult} revenus</b> sur le service. Un même artiste ne peut revenir qu'après ${C.artist_cooldown_services} services complets.</div>`}
     <div class="grid" style="grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr)">
-      <div class="list">${artists.map((a) => artistCard(a, c, d, C)).join("")}</div>
+      <div class="list" id="artist-list"></div>
       <div>
         <div class="panel accent-red"><h3>🔥 Combos secrets</h3><p class="muted small">Certaines combinaisons déclenchent des effets spéciaux. Ils se découvrent en jouant.</p>
           <div class="list">${C.combo_hints.map((h) => discovered.has(h.id) ? `<div class="combo-card found"><div class="kicker" style="color:var(--red2)">Découvert</div><b>${h.id === "coca_lagui" ? "Coca Cherry + Showcase Lagui" : "Boro 700 + Saisai"}</b><div class="small muted">${h.id === "coca_lagui" ? "Le même service : clients x2, entrées +25 %, bar +20 %, +2 VIP." : "Double showcase surprise : clients x2, entrées +20 %, bar +15 %, +1 VIP."}</div></div>` : `<div class="combo-card"><div class="kicker">Indice</div><div class="small">${esc(h.hint)}</div></div>`).join("")}</div></div>
@@ -355,7 +375,19 @@ export async function showcases(root) {
       </div>
     </div>`;
   if (window.innerWidth < 900) root.querySelector(".grid[style]").style.gridTemplateColumns = "1fr";
-  root.querySelectorAll("[data-book]").forEach((b) => b.onclick = () => bookShowcase(b.dataset.book, root));
+  const renderArtists = () => {
+    const query = normalizeArtist(showcaseFilters.query.trim());
+    const filtered = artists.filter((a) => normalizeArtist(a).includes(query) && (!showcaseFilters.affordable || d.artist_costs[a] <= c.cash));
+    filtered.sort((a, b) => showcaseFilters.sort === "price" ? d.artist_costs[a] - d.artist_costs[b] || a.localeCompare(b, "fr") : showcaseFilters.sort === "name" ? a.localeCompare(b, "fr") : (C.artists[b]?.rating ?? 0) - (C.artists[a]?.rating ?? 0) || a.localeCompare(b, "fr"));
+    root.querySelector("#artist-list").innerHTML = filtered.map((a) => artistCard(a, c, d, C)).join("") || `<div class="notice">Aucun artiste ne correspond à ces critères.</div>`;
+    root.querySelector("#artist-count").textContent = `${filtered.length} / ${artists.length} affiches`;
+    root.querySelectorAll("[data-book]").forEach((b) => b.onclick = () => bookShowcase(b.dataset.book, root));
+  };
+  root.querySelector("#artist-sort").value = showcaseFilters.sort;
+  root.querySelector("#artist-search").oninput = (e) => { showcaseFilters.query = e.target.value; renderArtists(); };
+  root.querySelector("#artist-sort").onchange = (e) => { showcaseFilters.sort = e.target.value; renderArtists(); };
+  root.querySelector("#artist-affordable").onchange = (e) => { showcaseFilters.affordable = e.target.checked; renderArtists(); };
+  renderArtists();
 }
 
 function artistCard(a, c, d, C) {
@@ -368,8 +400,8 @@ function artistCard(a, c, d, C) {
   const pop = Math.round(bonus * 100);
   const canAfford = c.cash >= cost;
   const disabled = c.showcase_pending || cd > 0 || !canAfford;
-  return `<div class="item ${cd > 0 ? "locked" : ""}"><div class="ico">🎤</div><div class="body">
-    <div class="title">${esc(a)} <span class="muted small" style="font-family:var(--font-body);font-weight:400">${a === "Lagui" ? "— car Lagui c'est le meilleur" : ""}</span></div>
+  return `<div class="item artist-card ${cd > 0 ? "locked" : ""}"><div class="artist-art"><span class="artist-edition">OLIVIA LIVE SESSIONS</span><span class="artist-initial">${esc(a.slice(0, 2).toUpperCase())}</span>${icon("showcases")}<span class="artist-stamp">${esc(C.artists[a]?.tier || "EXCLUSIF")}</span></div><div class="body">
+    <div class="title">${esc(a)} ${C.artists[a]?.rating != null ? `<span class="pill gold">${C.artists[a].rating}/100</span> <span class="pill">${esc(C.artists[a].tier)}</span>` : `<span class="pill violet">Artiste original</span>`}<span class="muted small" style="font-family:var(--font-body);font-weight:400">${a === "Lagui" ? "— car Lagui c'est le meilleur" : ""}</span></div>
     <div class="desc">Popularité <span class="gold">${stars(bonus)}</span> · bonus entrées <b class="green">+${pop} %</b> · clients potentiels <b>${lo}–${hi}</b>${a === "Boro 700" ? " · <span class='violet'>peut venir accompagné</span>" : ""}${a === "Bello&Dallas" ? " · <span class='red'>imprévisible</span>" : ""}</div>
     <div class="desc">Impact estimé sur les entrées : <b class="gold">x${entryMult.toFixed(2)}</b> (artiste × standing × ${C.showcase_income_mult}) · cooldown ${C.artist_cooldown_services} services${cd > 0 ? ` · <span class="red">encore ${cd} service${cd > 1 ? "s" : ""}</span>` : ""}</div></div>
     <div class="price">${money(cost)}</div><div class="actions"><button class="btn sm ${disabled ? "ghost" : "gold"}" data-book="${esc(a)}" ${disabled ? "disabled" : ""}>${c.showcase_pending ? "Déjà programmé" : cd > 0 ? "Repos" : canAfford ? "Programmer" : "Trésorerie"}</button></div></div>`;
@@ -382,7 +414,7 @@ async function bookShowcase(artist, root) {
   if (!ok) return;
   try {
     await act("/api/club/showcase", { artist });
-    overlay(`<h2>🎤 SHOWCASE PROGRAMMÉ</h2><div class="big" style="font-size:32px">${esc(artist).toUpperCase()}</div><p class="center muted">Le bonus sera appliqué au prochain service. L'enseigne annonce déjà la soirée.</p><div class="row" style="justify-content:center"><button class="btn violet" data-close>Parfait</button></div>`);
+    overlay(`<h2>🎤 SHOWCASE PROGRAMMÉ</h2><div class="big" style="font-size:32px">${esc(artist).toUpperCase()}</div><p class="center muted">Le clip et sa musique sont diffusés dans ta boîte. Le bonus sera appliqué au prochain service.</p><div class="row" style="justify-content:center"><a class="btn violet" href="#/club" data-close>Voir le showcase dans ma boîte</a></div>`);
     showcases(root);
   } catch {}
 }
@@ -549,7 +581,7 @@ export async function shop(root, params) {
         <div class="panel"><h3>Comment ça marche</h3><p class="small muted">Achat au prix affiché, revente à ${Math.round(sh.resale_rate * 100)} % du prix d'achat. Maximum ${num(sh.bitcoin_max_per_op)} BTC par opération. Les BTC peuvent aussi être échangés avec d'autres joueurs via la banque.</p></div>
       </div>` : `
       <div class="grid" style="grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr)">
-        <div class="list">${Object.entries(items).map(([id, it]) => { const n = count(ownedList, id), can = c.cash >= it.price; return `<div class="item ${n ? "owned" : ""}"><div class="ico">${icon}</div><div class="body"><div class="title">${esc(it.name)}${n ? ` <span class="pill gold">Possédé ×${n}</span>` : ""}</div><div class="desc">Achat <b>${money(it.price)}</b> · revente <b>${money(Math.floor(it.price * sh.resale_rate))}</b></div></div><div class="actions"><button class="btn sm ${can ? "gold" : "ghost"}" data-buy="${id}" ${can ? "" : "disabled"}>Acheter</button>${n ? `<button class="btn sm red" data-sell="${id}">Revendre</button>` : ""}</div></div>`; }).join("")}</div>
+        <div class="list">${Object.entries(items).map(([id, it]) => { const n = count(ownedList, id), can = c.cash >= it.price; return `<div class="item ${n ? "owned" : ""}"><div class="ico">${tab === "cars" ? designCarIcon() : designWatchIcon()}</div><div class="body"><div class="title">${esc(it.name)}${n ? ` <span class="pill gold">Possédé ×${n}</span>` : ""}</div><div class="desc">Achat <b>${money(it.price)}</b> · revente <b>${money(Math.floor(it.price * sh.resale_rate))}</b></div></div><div class="actions"><button class="btn sm ${can ? "gold" : "ghost"}" data-buy="${id}" ${can ? "" : "disabled"}>Acheter</button>${n ? `<button class="btn sm red" data-sell="${id}">Revendre</button>` : ""}</div></div>`; }).join("")}</div>
         <div class="panel"><h3>${icon} Ma collection</h3><div class="row between small muted" style="margin-bottom:8px"><span>${ownedList.length} article${ownedList.length > 1 ? "s" : ""}</span><span class="gold">Valeur ${money(collValue(ownedList, items))}</span></div>
           <div class="collection">${Object.entries(items).map(([id, it]) => { const n = count(ownedList, id); return `<div class="coll-item ${n ? "owned" : ""}"><div class="i">${n ? icon : "🔒"}</div><div class="n">${esc(it.name)}</div><div class="p">${money(it.price)}</div>${n ? `<div class="q">×${n}</div>` : ""}</div>`; }).join("")}</div></div>
       </div>`}`;
@@ -700,21 +732,22 @@ export async function visit(root, params) {
   const id = Number(params.id);
   if (id === S.state.user.id) return club(root);
   const v = await api(`/api/clubs/${id}`);
+  if (S.route.name !== "visit" || Number(S.route.params.id) !== id) return;
   const C = cfg(), me = myClub(), d = derived();
   const cars = C.shop.cars; let best = null; for (const cid of v.cars) { const it = cars[cid]; if (it && (!best || it.price > best.price)) best = it; }
   const chance = Math.max(C.robbery.min_chance, Math.min(C.robbery.max_chance, C.robbery.base_chance + d.robbery_power - v.robbery_power));
   const inside = S.cache[`inside-${id}`];
   const occ = Math.round(v.occupancy * 100);
-  const music = v.showcase_pending ? `Showcase de ${v.showcase_artist} annoncé` : v.equipment.includes("dj") ? "DJ résident aux platines" : v.equipment.includes("sound") ? "Sono haut de gamme à fond" : "Playlist maison";
+  const music = v.showcase_pending ? `Showcase de ${v.showcase_artist} en direct` : v.equipment.includes("dj") ? "DJ résident aux platines" : v.equipment.includes("sound") ? "Sono haut de gamme à fond" : "Playlist maison";
   const ambience = occ >= 90 ? "La salle est pleine à craquer, la file déborde sur le trottoir." : occ >= 60 ? "Grosse affluence, le carré est animé et les bouteilles partent vite." : occ >= 25 ? "Ambiance correcte, la piste se remplit doucement." : "Soirée calme, quelques habitués au bar.";
   root.innerHTML = `
-    <div class="visit-hero scene-wrap">${renderScene({ ...v }, { config: C, levelName: v.level_name, serverTime: now(), carName: best?.name })}
+    <div class="visit-hero scene-wrap club-cinematic">
       <div class="title"><div><div class="kicker">Visite du club</div><h1>${esc(v.name)}</h1><div class="muted">par ${esc(v.avatar)} ${esc(v.owner)} ${v.online ? `<span class="pill green"><span class="dot"></span>en ligne</span>` : ""}</div></div><div class="row">${statusPill(v.status)}${levelPill(v.level, v.level_name)}</div></div>
       <div class="scene-overlay"><div class="chip">Fréquentation<b>${num(v.last_clients)}</b></div><div class="chip">Occupation<b>${occ} %</b></div><div class="chip gold">Entrée<b>${money(v.entry_price)}</b></div><div class="chip gold">Trésorerie<b>${money(v.cash)}</b></div></div>
     </div>
     <div class="row" style="margin:14px 0"><button class="btn gold lg" id="enter">${inside ? "🚪 Ressortir" : "🚪 Entrer"}</button><a class="btn ghost" href="#/profile/${id}">Profil du patron</a><a class="btn ghost" href="#/bank/${id}">🍾 Envoyer un pack</a><a class="btn ghost" href="#/bank/${id}">💸 Transférer · Trade</a><a class="btn red" href="#/bank/${id}">🚨 Braquer (${chance} %)</a></div>
     ${inside ? `<div class="panel accent-violet" style="margin-bottom:14px"><div class="kicker">À l'intérieur</div><h2>${esc(v.name)}</h2><p>${ambience}</p>
-      <div class="grid four"><div class="metric"><span class="k">Musique</span><span class="v" style="font-size:16px">${esc(music)}</span></div><div class="metric"><span class="k">File d'attente</span><span class="v">${Math.round(v.occupancy * 40)} pers.</span></div><div class="metric violet"><span class="k">VIP ce soir</span><span class="v">${v.last_vips}</span></div><div class="metric"><span class="k">Activité</span><span class="v" style="font-size:16px">${v.showcase_pending ? "🎤 Showcase en préparation" : v.last_event ? esc(v.last_event.title) : "Soirée normale"}</span></div></div>
+      <div class="grid four"><div class="metric"><span class="k">Musique</span><span class="v" style="font-size:16px">${esc(music)}</span></div><div class="metric"><span class="k">File d'attente</span><span class="v">${Math.round(v.occupancy * 40)} pers.</span></div><div class="metric violet"><span class="k">VIP ce soir</span><span class="v">${v.last_vips}</span></div><div class="metric"><span class="k">Activité</span><span class="v" style="font-size:16px">${v.showcase_pending ? "🎤 Showcase en cours" : v.last_event ? esc(v.last_event.title) : "Soirée normale"}</span></div></div>
       ${v.equipment.length ? `<div class="row" style="margin-top:10px">${v.equipment.map((e) => `<span class="pill">${C.equipment[e]?.emoji || ""} ${esc(C.equipment[e]?.name || e)}</span>`).join("")}</div>` : `<div class="muted small" style="margin-top:8px">Aucun équipement particulier.</div>`}</div>` : ""}
     <div class="grid three">
       <div class="panel"><h3>Informations publiques</h3><div class="list">
@@ -723,8 +756,8 @@ export async function visit(root, params) {
       <div class="panel"><h3>Comparé à ${esc(me.name)}</h3><div class="list"><div class="row between"><span class="muted">Trésorerie</span><b class="${me.cash >= v.cash ? "green" : "red"}">${money(me.cash - v.cash, { sign: true })}</b></div><div class="row between"><span class="muted">Niveau</span><b>${me.level} vs ${v.level}</b></div><div class="row between"><span class="muted">Fréquentation</span><b class="${me.last_clients >= v.last_clients ? "green" : "red"}">${me.last_clients - v.last_clients >= 0 ? "+" : ""}${num(me.last_clients - v.last_clients)}</b></div><div class="row between"><span class="muted">Chance de braquage</span><b class="${chance >= 50 ? "green" : "red"}">${chance} %</b></div></div></div>
     </div>`;
   // Contexte audio : la vue consultée est CE club (pas le mien) → son showcase à lui, uniquement ici.
-  audio.setView({ clubId: id, level: v.level, showcase: v.showcase_pending ? { artist: v.showcase_artist, ends_at: v.next_service } : null });
-  root.querySelector("#enter").onclick = () => { S.cache[`inside-${id}`] = !inside; visit(root, params); if (!inside) toast({ icon: "🚪", title: `Bienvenue au ${v.name}`, text: ambience, tone: "violet" }); };
+  audio.setView(inside ? { clubId: id, level: v.level, showcase: v.showcase_screen } : null);
+  root.querySelector("#enter").onclick = () => { S.cache[`inside-${id}`] = !inside; if (inside) audio.setView(null); visit(root, params); if (!inside) toast({ icon: "🚪", title: `Bienvenue au ${v.name}`, text: ambience, tone: "violet" }); };
 }
 
 // ==========================================================
@@ -733,7 +766,7 @@ export async function visit(root, params) {
 export async function notifications(root) {
   const data = await api("/api/notifications");
   root.innerHTML = `${head("Centre de notifications", `${data.unread} non lue${data.unread > 1 ? "s" : ""}`, `<button class="btn sm ghost" id="readall">Tout marquer comme lu</button>`)}
-    <div class="list">${data.notifications.length ? data.notifications.map((n) => `<div class="notif ${n.read ? "" : "unread"}"><div class="i">${esc(n.icon)}</div><div><div class="t">${esc(n.title)}</div><div class="d">${esc(n.text)}</div></div><div class="when">${dateTime(n.ts)}</div></div>`).join("") : `<div class="muted">Aucune notification.</div>`}</div>`;
+    <div class="list">${data.notifications.length ? data.notifications.map((n) => `<div class="notif ${n.read ? "" : "unread"}"><div class="i">${esc(n.icon)}</div><div><div class="t">${esc(n.title)}</div><div class="d">${esc(n.text)}</div></div><div class="when">${dateTime(n.ts)}</div></div>`).join("") : `<div class="empty-state">${icon("notifications")}<h2>Une nuit tranquille.</h2><p>Vos nouvelles notifications apparaîtront ici.</p></div>`}</div>`;
   const mark = async () => { const r = await api("/api/notifications/read", { method: "POST", body: {} }); S.unread = r.unread; };
   root.querySelector("#readall").onclick = async () => { await mark(); notifications(root); };
   await mark();
@@ -762,6 +795,7 @@ export async function levels(root) {
 // PARAMÈTRES (audio)
 // ==========================================================
 export async function settings(root) {
+  const hostAccess = await api("/api/auth/local-admin");
   const p = audio.prefs;
   const st = audio.status();
   const slider = (key, icon, label, hint) => `<div class="setting"><div class="row between"><label for="s-${key}">${icon} ${label}</label><span class="num" id="v-${key}">${Math.round((p[key] ?? 0) * 100)} %</span></div>
@@ -783,7 +817,7 @@ export async function settings(root) {
         <div class="panel"><h3>Comment fonctionne le son</h3>
           <div class="list small">
             <div class="notice red"><b>🚨 Braquage — GLOBAL.</b> Quand un braquage est validé par le serveur, l'événement <code>robbery_created</code> est diffusé à tous les joueurs connectés (braqueur compris) : FX + notification synchronisés, où que vous soyez dans le jeu. Anti-spam : au plus ${audio.settings.fx_max} sons par ${audio.settings.fx_window} s, volumes décroissants — l'événement de jeu n'est jamais bloqué.</div>
-            <div class="notice"><b>🎤 Showcase — LOCAL.</b> Le son d'un showcase ne joue que si vous consultez la vue du club concerné (« Ma boîte » ou « Visite »). Changer de page ou de club coupe le son (fondu court). Chaque club a son propre état ; plusieurs showcases simultanés ne se mélangent jamais. Un extrait aléatoire est choisi à chaque fois, jamais deux fois de suite le même.</div>
+            <div class="notice"><b>🎤 Showcase — LOCAL.</b> Le son d'un showcase ne joue que si vous consultez la vue du club concerné (« Ma boîte » ou « Visite »). Changer de page ou de club coupe le son (fondu court). Chaque club a son propre état ; plusieurs showcases simultanés ne se mélangent jamais. Le serveur choisit les clips YouTube : vidéo et musique sont partagées uniquement entre les joueurs à l’intérieur de la même boîte.</div>
             <div class="notice gold"><b>🎧 Ambiance.</b> Propre à la vue du club ; réduite à ${Math.round(audio.settings.ducking * 100)} % pendant un extrait de showcase, puis revient progressivement.</div>
           </div></div>
         <div class="panel" style="margin-top:14px"><h3>État</h3><div class="list small">
@@ -793,6 +827,13 @@ export async function settings(root) {
           <div class="row between"><span class="muted">Ambiance</span><b>${st.ambient ? "en lecture" : "—"}</b></div></div></div>
       </div>
     </div>`;
+  root.insertAdjacentHTML("beforeend", `<div class="panel host-access" style="margin-top:18px"><div><div class="eyebrow">ORDINATEUR HÔTE</div><h3>Administration du jeu</h3><p class="muted small">${S.state.user.is_admin ? "Votre compte peut gérer les joueurs et supprimer une boîte problématique." : hostAccess.available ? "Vous êtes sur l’ordinateur qui héberge le jeu. Vous pouvez activer l’administration pour votre compte." : "Pour activer l’administration depuis le PC qui héberge le jeu, ouvrez le jeu avec l’adresse localhost et connectez-vous à votre compte."}</p></div>${S.state.user.is_admin ? `<a class="btn violet" href="#/admin">${icon("admin")} Ouvrir l’administration</a>` : hostAccess.available ? `<button class="btn violet" id="claim-admin">${icon("admin")} Activer mon accès administrateur</button>` : ""}</div>`);
+  const claim = root.querySelector("#claim-admin");
+  if (claim) claim.onclick = async () => {
+    claim.disabled = true;
+    try { await act("/api/auth/local-admin", {}); location.hash = "#/admin"; await render(); toast({ title: "Accès administrateur activé", text: "Ce compte peut maintenant gérer les établissements.", tone: "violet" }); }
+    catch { claim.disabled = false; }
+  };
   root.querySelectorAll("[data-pref]").forEach((inp) => inp.oninput = () => { audio.setPref(inp.dataset.pref, Number(inp.value) / 100); root.querySelector(`#v-${inp.dataset.pref}`).textContent = `${inp.value} %`; });
   root.querySelector("#mute").onclick = () => { audio.toggleMute(); settings(root); };
   const unlock = root.querySelector("#unlock"); if (unlock) unlock.onclick = () => { audio.unlock(); setTimeout(() => settings(root), 300); };
@@ -808,7 +849,14 @@ export async function admin(root) {
   const byCat = {};
   for (const a of assets) (byCat[a.category] = byCat[a.category] || []).push(a);
   root.innerHTML = `${head("Administration", "Panneau réservé")}
+    <section class="panel club-moderation" style="margin-bottom:22px"><div class="row between"><div><div class="eyebrow">GESTION DES ÉTABLISSEMENTS</div><h2>Les boîtes de la ville</h2></div><span class="pill violet">${users.filter(u => u.club).length} établissements</span></div><p class="muted small">Supprimez une boîte précise si elle pose problème. Son propriétaire conserve son compte et pourra repartir avec un nouvel établissement.</p><div class="grid three">${users.filter(u => u.club).map(u => `<article class="moderation-card"><div class="row between">${icon("club")}<span class="pill">Niveau ${u.level}</span></div><h3>${esc(u.club)}</h3><p class="muted small">@${esc(u.username)} · ${money(u.cash)}</p>${u.id === S.state.user.id ? `<span class="pill violet">Votre établissement</span>` : `<button class="btn red sm" data-delete-club="${u.id}">Supprimer cette boîte</button>`}</article>`).join("") || `<p class="muted">Aucun établissement.</p>`}</div></section>
     <div class="grid two">
+      <div class="panel" style="grid-column:1 / -1"><h3>🎬 Clips YouTube des showcases</h3>
+        <p class="muted small">Le catalogue propose des clips pour chaque artiste. Ajoute des liens pour enrichir les prochains showcases : la même diffusion sera visible et audible par les joueurs à l'intérieur de la boîte concernée.</p>
+        <label>Artiste<select id="youtube-artist">${conf.effective.artist_order.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select></label>
+        <label>Liens YouTube<textarea id="youtube-urls" placeholder="Un lien YouTube par ligne"></textarea></label>
+        <button class="btn gold" id="youtube-add">Ajouter les clips</button><span id="youtube-result" class="small" role="status"></span>
+      </div>
       <div class="panel" style="grid-column: 1 / -1"><div class="row between"><h3>🎚️ Assets audio (${assets.length})</h3><button class="btn sm gold" id="rescan">Rescanner les assets</button></div>
         <p class="muted small">Dossier <code>web/audio/</code> : <code>robbery/</code>, <code>showcases/&lt;artiste&gt;/</code>, <code>ambient/</code>, <code>ui/</code>, <code>events/</code>. Déposez des fichiers .mp3/.ogg/.wav puis rescannez. Les dossiers d'artistes vides utilisent <code>showcases/_placeholder/</code>. Aucun contenu protégé n'est fourni : les placeholders sont synthétisés (<code>tools/make_placeholder_audio.py</code>).</p>
         <div class="grid three">${Object.entries(byCat).map(([cat, list]) => `<div><div class="kicker">${cat}</div><div class="list">${list.map((a) => `<div class="item tight" style="padding:6px 10px"><div class="body"><div class="small">${esc(a.file_url.replace("audio/", ""))}</div><div class="small muted">${a.key} · ${a.duration ? a.duration.toFixed(1) + " s" : "?"} · poids ${a.weight}</div></div><div class="actions"><button class="btn sm ${a.enabled ? "green" : "ghost"}" data-asset="${a.id}" data-enabled="${a.enabled ? 0 : 1}">${a.enabled ? "Activé" : "Désactivé"}</button></div></div>`).join("")}</div></div>`).join("")}</div></div>
@@ -821,7 +869,30 @@ export async function admin(root) {
       <div class="panel"><h3>Importer les joueurs du bot Discord</h3><p class="muted small">Collez le contenu de <code>nightclub_data.json</code>. Chaque joueur Discord devient un compte <code>discord_&lt;id&gt;</code> avec son club à l'identique ; définissez ensuite son mot de passe (🔑). Plus tard, Discord pourra devenir une méthode de connexion.</p><textarea class="code" id="imp" style="min-height:160px" placeholder='{ "734865069904756766": { "name": "…", "cash": 0, … } }'></textarea><button class="btn violet" style="margin-top:8px" id="import">Importer</button><div id="imp-res" class="small" style="margin-top:8px"></div></div>
       <div class="panel"><h3>Config effective</h3><textarea class="code" id="eff" readonly style="min-height:300px">${esc(JSON.stringify(conf.effective, null, 2))}</textarea></div>
     </div>`;
+  root.querySelectorAll("[data-delete-club]").forEach(button => button.onclick = () => {
+    const target = users.find(u => u.id === Number(button.dataset.deleteClub));
+    if (!target) return;
+    const close = overlay(`<div class="eyebrow center">GESTION DES ÉTABLISSEMENTS</div><h2>Supprimer ${esc(target.club)} ?</h2><p class="muted small">La boîte, sa progression et son historique financier seront supprimés. Ses échanges en attente seront annulés. Le compte @${esc(target.username)} est conservé. Cette action est définitive.</p><div class="field"><label for="delete-club-name">Recopiez le nom de la boîte pour confirmer</label><input id="delete-club-name" autocomplete="off" placeholder="${esc(target.club)}"></div><div class="row between"><button class="btn ghost" data-close>Annuler</button><button class="btn red" id="delete-club-confirm" disabled>Supprimer cette boîte</button></div><p id="delete-club-error" class="error" role="alert"></p>`);
+    const input = document.getElementById("delete-club-name"), confirm = document.getElementById("delete-club-confirm");
+    input.oninput = () => { confirm.disabled = input.value !== target.club; };
+    confirm.onclick = async () => {
+      confirm.disabled = true;
+      try { await api(`/api/admin/clubs/${target.id}`, { method: "DELETE", body: { confirm_name: input.value } }); close(); toast({ title: "Boîte supprimée", text: target.club, tone: "violet" }); await admin(root); }
+      catch (e) { document.getElementById("delete-club-error").textContent = e.message; confirm.disabled = input.value !== target.club; }
+    };
+    input.focus();
+  });
   const save = async (ov) => { try { await api("/api/admin/config", { method: "PUT", body: { overrides: ov } }); toast({ icon: "⚙", title: "Configuration enregistrée", tone: "gold" }); await refresh(); admin(root); } catch (e) { root.querySelector("#err").textContent = e.message; } };
+  root.querySelector("#youtube-add").onclick = async () => {
+    const button = root.querySelector("#youtube-add"), result = root.querySelector("#youtube-result");
+    button.disabled = true;
+    result.textContent = "Ajout en cours…";
+    try {
+      const data = await api("/api/admin/audio/youtube", { method: "POST", body: { artist: root.querySelector("#youtube-artist").value, urls: root.querySelector("#youtube-urls").value } });
+      result.textContent = `${data.added.length} clip(s) ajouté(s), ${data.skipped.length} déjà présent(s). Disponibles au prochain showcase.`;
+    } catch (e) { result.textContent = e.message; }
+    finally { button.disabled = false; }
+  };
   root.querySelector("#save").onclick = () => { try { save(JSON.parse(root.querySelector("#ov").value || "{}")); } catch (e) { root.querySelector("#err").textContent = "JSON invalide : " + e.message; } };
   root.querySelector("#reset").onclick = async () => { if (await confirmBox({ title: "Réinitialiser", html: "<p>Toutes les surcharges seront supprimées.</p>", tone: "red" })) save({}); };
   root.querySelector("#reset-server").onclick = async () => {

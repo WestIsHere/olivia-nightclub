@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, services
+from .local_admin import is_host_request
 from .config import DEFAULT_CONFIG, public_config
 from .services import GameError, db, hub
 
@@ -101,7 +102,7 @@ def set_cookie(response: Response, token: str):
 
 
 @app.post("/api/auth/register")
-def api_register(response: Response, body: dict = Body(...)):
+def api_register(request: Request, response: Response, body: dict = Body(...)):
     username = str(body.get("username", "")).strip().lower()
     display_name = str(body.get("display_name", "")).strip() or username
     password = str(body.get("password", ""))
@@ -112,7 +113,11 @@ def api_register(response: Response, body: dict = Body(...)):
         raise GameError("INVALID", "Mot de passe : 6 caractères minimum.")
     if not (2 <= len(club_name) <= 40):
         raise GameError("INVALID", "Nom de la boîte : 2 à 40 caractères.")
-    user = services.register(username, display_name[:24], auth.hash_password(password), club_name)
+    local_admin = bool(body.get("local_admin"))
+    if local_admin and not is_host_request(request):
+        raise HTTPException(status_code=403, detail="Ouvrez le jeu sur cet ordinateur via localhost pour activer l'administration.")
+    user = services.register(username, display_name[:24], auth.hash_password(password), club_name,
+                             is_admin=local_admin)
     token = auth.new_session(db, user["id"])
     set_cookie(response, token)
     return services.build_state(user)
@@ -393,6 +398,11 @@ def api_active_showcases(user=Depends(current_user)):
     return {"showcases": services.active_showcases()}
 
 
+@app.get("/api/clubs/{club_id}/showcase")
+def api_club_screen(club_id: int, user=Depends(current_user)):
+    return services.club_screen(club_id)
+
+
 @app.get("/api/robberies")
 def api_robberies(user=Depends(current_user)):
     return {"robberies": db.recent_robberies(20)}
@@ -423,8 +433,8 @@ def api_admin_audio_put(asset_id: int, body: dict = Body(...), admin=Depends(cur
 def api_admin_audio_youtube(body: dict = Body(...), admin=Depends(current_admin)):
     """Ajoute des clips YouTube (URLs ou IDs) au showcase d'un artiste."""
     artist = str(body.get("artist", "")).strip()
-    if not artist:
-        raise GameError("INVALID", "Artiste manquant.")
+    if artist not in services.cfg()["artists"]:
+        raise GameError("INVALID", "Artiste inconnu.")
     # Les titres sont récupérés via oEmbed (réseau) HORS verrou, puis insérés sous verrou.
     ids = services.audio_assets.parse_youtube_ids(str(body.get("urls", "")))
     if not ids:
@@ -492,6 +502,30 @@ async def api_events(request: Request, user=Depends(current_user)):
 # ------------------------------------------------------------------
 # Administration
 # ------------------------------------------------------------------
+
+@app.get("/api/auth/local-admin")
+def api_local_admin_available(request: Request):
+    return {"available": is_host_request(request)}
+
+
+@app.post("/api/auth/local-admin")
+def api_claim_local_admin(request: Request, body: dict = Body(...), user=Depends(current_user)):
+    if not is_host_request(request):
+        raise HTTPException(status_code=403, detail="Cette action est réservée à l'ordinateur qui héberge le jeu (localhost).")
+    with services.LOCK:
+        db.begin()
+        try:
+            db.set_admin(user["id"], True)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+    return services.build_state(db.get_user(user["id"]))
+
+
+@app.delete("/api/admin/clubs/{user_id}")
+def api_admin_delete_club(user_id: int, body: dict = Body(...), admin=Depends(current_admin)):
+    return services.admin_delete_club(admin, user_id, str(body.get("confirm_name", "")))
 
 @app.post("/api/admin/reset-server")
 def api_admin_reset_server(request: Request, admin=Depends(current_admin)):
@@ -605,7 +639,7 @@ def api_admin_club_put(user_id: int, body: dict = Body(...), admin=Depends(curre
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "service": "olivia-nightclubs"}
+    return {"ok": True, "service": "olivia-nightclubs", "version": os.environ.get("RENDER_GIT_COMMIT", "local")}
 
 
 # ------------------------------------------------------------------
