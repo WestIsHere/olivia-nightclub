@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: olivia-nightclubs
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    envVars:
+      - key: OLIVIA_HOST
+        value: 0.0.0.0
+      - key: OLIVIA_PORT
+        value: 10000
+      - key: OLIVIA_DB
+        value: /var/data/olivia.db
+      - key: OLIVIA_SECURE_COOKIES
+        value: "1"
+      - key: OLIVIA_WORLD_INTERVAL
+        value: "5"
+    disk:
+      name: olivia-data
+      mountPath: /var/data
+      sizeGB: 1
