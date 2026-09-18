@@ -278,6 +278,7 @@ function tickTimer() {
   }
 }
 setInterval(tickTimer, 1000);
+setInterval(() => { if (S.route.name === "shop") pages.updateMarketView(); }, 5000);
 function pageWantsLiveRefresh() { return ["dashboard", "club", "city"].includes(S.route.name); }
 
 // ---------------- Feedback ----------------
@@ -400,6 +401,22 @@ export function connectSSE() {
   const es = new EventSource("/api/events");
   es.addEventListener("open", () => audio.screen.poll());
   S.sse = es;
+  es.addEventListener("markets", (e) => {
+    if (!S.state?.club) return;
+    const { markets, shop } = JSON.parse(e.data);
+    S.cache.markets = markets;
+    S.state.config.shop = shop;
+    const c = S.state.club;
+    S.state.derived.net_worth = Math.floor(c.cash + Number(c.bitcoin || 0) * shop.bitcoin_price
+      + Object.entries(c.crypto || {}).reduce((sum, [key, qty]) => sum + Number(qty) * (shop.crypto_quotes?.[key]?.price || 0), 0)
+      + ["cars", "watches"].reduce((sum, cat) => sum + c[cat].reduce((v, id) => v + (shop[cat][id]?.price || 0), 0), 0));
+    document.querySelectorAll("[data-own-wealth]").forEach(el => { el.textContent = money(S.state.derived.net_worth); });
+    if (S.route.name === "shop") pages.updateMarketView();
+    else if (!document.hidden && ["profile", "leaderboard", "city"].includes(S.route.name)) {
+      const scroll = window.scrollY, route = location.hash;
+      render().then(() => { if (location.hash === route) window.scrollTo({ top: scroll }); });
+    }
+  });
   es.addEventListener("service", (e) => {
     const r = JSON.parse(e.data);
     if (document.hidden) { S.hiddenReports.push(r); return; } // récap unique au retour

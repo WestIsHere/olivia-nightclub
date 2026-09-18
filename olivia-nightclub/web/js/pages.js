@@ -200,7 +200,7 @@ export async function dashboard(root) {
   root.innerHTML = `
     ${head("Direction", esc(c.name), `<a class="btn sm gold" href="#/showcases">🎤 Programmer un showcase</a><a class="btn sm ghost" href="#/equipment">🔊 Équipements</a>`)}
     <div class="grid four" style="margin-bottom:14px">
-      <div class="metric gold"><span class="k">Trésorerie</span><span class="v">${money(c.cash)}</span><span class="s">Richesse totale ${money(d.net_worth)}</span></div>
+      <div class="metric gold"><span class="k">Trésorerie</span><span class="v">${money(c.cash)}</span><span class="s">Richesse totale <span data-own-wealth>${money(d.net_worth)}</span></span></div>
       <div class="metric"><span class="k">Dernier service</span><span class="v">${money(c.last_income)}</span><span class="s">${num(c.last_clients)} clients · ${c.last_vips} VIP</span></div>
       <div class="metric green"><span class="k">Revenus du jour</span><span class="v">${money(fin.today.total)}</span><span class="s">${fin.today.n} services</span></div>
       <div class="metric ${fin.today.net >= 0 ? "green" : "red"}"><span class="k">Bénéfice du jour</span><span class="v">${money(fin.today.net)}</span><span class="s">Dépenses ${money(fin.today.expenses)}</span></div>
@@ -558,48 +558,7 @@ async function bjAction(root, op, bet) {
 // ==========================================================
 // BOUTIQUE
 // ==========================================================
-export async function shop(root, params) {
-  const c = myClub(), C = cfg(), sh = C.shop;
-  const tab = params?.id || S.cache.shopTab || "cars";
-  S.cache.shopTab = tab;
-  const count = (list, id) => list.filter((x) => x === id).length;
-  const items = tab === "cars" ? sh.cars : sh.watches;
-  const ownedList = tab === "cars" ? c.cars : c.watches;
-  const icon = tab === "cars" ? "🚘" : "⌚";
-  const collValue = (list, cat) => list.reduce((a, id) => a + (cat[id]?.price || 0), 0);
-  const btcValue = c.bitcoin * sh.bitcoin_price, btcResale = Math.floor(sh.bitcoin_price * sh.resale_rate) * c.bitcoin;
-  root.innerHTML = `
-    ${head("Boutique — Olivia BTQ", "Dépensez l'argent de votre boîte pour votre collection", `<span class="pill gold">Trésorerie ${money(c.cash)}</span>`)}
-    <div class="tabs" style="max-width:520px"><button class="${tab === "cars" ? "on" : ""}" data-t="cars">🚘 Voitures</button><button class="${tab === "watches" ? "on" : ""}" data-t="watches">⌚ Montres</button><button class="${tab === "bitcoin" ? "on" : ""}" data-t="bitcoin">🪙 Bitcoin</button></div>
-    ${tab === "bitcoin" ? `
-      <div class="grid two">
-        <div class="panel accent-gold"><h3>₿ Bitcoin</h3>
-          <div class="grid two"><div class="metric gold"><span class="k">Bitcoin détenus</span><span class="v">${num(c.bitcoin)} BTC</span></div><div class="metric"><span class="k">Prix actuel</span><span class="v">${money(sh.bitcoin_price)}</span><span class="s">Revente ${money(Math.floor(sh.bitcoin_price * sh.resale_rate))} / BTC</span></div>
-          <div class="metric"><span class="k">Valeur totale</span><span class="v">${money(btcValue)}</span></div><div class="metric ${btcResale - btcValue >= 0 ? "green" : "red"}"><span class="k">Plus-value / moins-value</span><span class="v">${money(btcResale - btcValue, { sign: true })}</span><span class="s">à la revente (${Math.round(sh.resale_rate * 100)} %)</span></div></div>
-          <div class="row" style="margin-top:14px"><input id="qty" type="number" min="1" value="1" style="max-width:140px"><button class="btn gold" id="btc-buy">Acheter</button><button class="btn red" id="btc-sell">Revendre</button></div>
-          <p class="muted small">Le prix est fourni par la configuration serveur : l'architecture permet de le faire varier plus tard.</p></div>
-        <div class="panel"><h3>Comment ça marche</h3><p class="small muted">Achat au prix affiché, revente à ${Math.round(sh.resale_rate * 100)} % du prix d'achat. Maximum ${num(sh.bitcoin_max_per_op)} BTC par opération. Les BTC peuvent aussi être échangés avec d'autres joueurs via la banque.</p></div>
-      </div>` : `
-      <div class="grid" style="grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr)">
-        <div class="list">${Object.entries(items).map(([id, it]) => { const n = count(ownedList, id), can = c.cash >= it.price; return `<div class="item ${n ? "owned" : ""}"><div class="ico">${tab === "cars" ? designCarIcon() : designWatchIcon()}</div><div class="body"><div class="title">${esc(it.name)}${n ? ` <span class="pill gold">Possédé ×${n}</span>` : ""}</div><div class="desc">Achat <b>${money(it.price)}</b> · revente <b>${money(Math.floor(it.price * sh.resale_rate))}</b></div></div><div class="actions"><button class="btn sm ${can ? "gold" : "ghost"}" data-buy="${id}" ${can ? "" : "disabled"}>Acheter</button>${n ? `<button class="btn sm red" data-sell="${id}">Revendre</button>` : ""}</div></div>`; }).join("")}</div>
-        <div class="panel"><h3>${icon} Ma collection</h3><div class="row between small muted" style="margin-bottom:8px"><span>${ownedList.length} article${ownedList.length > 1 ? "s" : ""}</span><span class="gold">Valeur ${money(collValue(ownedList, items))}</span></div>
-          <div class="collection">${Object.entries(items).map(([id, it]) => { const n = count(ownedList, id); return `<div class="coll-item ${n ? "owned" : ""}"><div class="i">${n ? icon : "🔒"}</div><div class="n">${esc(it.name)}</div><div class="p">${money(it.price)}</div>${n ? `<div class="q">×${n}</div>` : ""}</div>`; }).join("")}</div></div>
-      </div>`}`;
-  root.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { S.cache.shopTab = b.dataset.t; shop(root, { id: b.dataset.t }); });
-  root.querySelectorAll("[data-buy]").forEach((b) => b.onclick = async () => {
-    const it = items[b.dataset.buy];
-    if (!(await confirmBox({ title: `Acheter ${it.name}`, html: `<p>Prix : <b class="red">${money(it.price)}</b><br><span class="muted small">Revente possible à ${money(Math.floor(it.price * sh.resale_rate))}.</span></p>`, okLabel: "Acheter" }))) return;
-    try { await act("/api/shop/buy", { category: tab, item_id: b.dataset.buy }); overlay(`<div class="big" style="font-size:44px">${icon}</div><h2>${esc(it.name).toUpperCase()}</h2><p class="center muted">Nouvelle pièce dans votre collection.</p><div class="big red" style="font-size:26px">${money(-it.price)}</div><div class="row" style="justify-content:center;margin-top:12px"><button class="btn gold" data-close>Continuer</button></div>`); shop(root, { id: tab }); } catch {}
-  });
-  root.querySelectorAll("[data-sell]").forEach((b) => b.onclick = async () => {
-    const it = items[b.dataset.sell];
-    if (!(await confirmBox({ title: `Revendre ${it.name}`, html: `<p>Vous recevrez <b class="green">${money(Math.floor(it.price * sh.resale_rate))}</b>.</p>`, okLabel: "Revendre", tone: "red" }))) return;
-    try { await act("/api/shop/sell", { category: tab, item_id: b.dataset.sell }); toast({ icon: "💸", title: "Vente confirmée", text: `${it.name} revendu.`, tone: "green" }); shop(root, { id: tab }); } catch {}
-  });
-  const buy = root.querySelector("#btc-buy"), sell = root.querySelector("#btc-sell");
-  if (buy) buy.onclick = async () => { const q = Number(root.querySelector("#qty").value); if (!(await confirmBox({ title: `Acheter ${q} BTC`, html: `<p>Total : <b class="red">${money(q * sh.bitcoin_price)}</b></p>`, okLabel: "Acheter" }))) return; try { await act("/api/bitcoin/buy", { quantity: q }); toast({ icon: "🪙", title: "Bitcoin acheté", text: `${q} BTC`, tone: "gold" }); shop(root, { id: "bitcoin" }); } catch {} };
-  if (sell) sell.onclick = async () => { const q = Number(root.querySelector("#qty").value); if (!(await confirmBox({ title: `Revendre ${q} BTC`, html: `<p>Vous recevrez <b class="green">${money(q * Math.floor(sh.bitcoin_price * sh.resale_rate))}</b></p>`, okLabel: "Revendre", tone: "red" }))) return; try { await act("/api/bitcoin/sell", { quantity: q }); toast({ icon: "💸", title: "Bitcoin revendu", text: `${q} BTC`, tone: "green" }); shop(root, { id: "bitcoin" }); } catch {} };
-}
+export { shop, updateMarketView } from "./market-ui.js";
 
 // ==========================================================
 // BANQUE — transferts, bouteilles, trades, braquage
@@ -655,7 +614,7 @@ export async function bank(root, params) {
   const refreshTradeValue = () => {
     const wrap = root.querySelector("#trade-value-wrap"), k = tt.value;
     if (k === "money") wrap.innerHTML = `<label>Montant (€)</label><input id="trade-value" type="number" min="1">`;
-    else if (k === "bitcoin") wrap.innerHTML = `<label>Nombre de BTC</label><input id="trade-value" type="number" min="1" max="${c.bitcoin}">`;
+    else if (k === "bitcoin") wrap.innerHTML = `<label>Nombre de BTC</label><input id="trade-value" type="number" min="0.00000001" step="0.00000001" max="${c.bitcoin}">`;
     else { const list = k === "cars" ? c.cars : c.watches, items = C.shop[k]; wrap.innerHTML = `<label>Objet</label><select id="trade-value">${[...new Set(list)].map((id) => `<option value="${id}">${esc(items[id]?.name || id)}</option>`).join("") || `<option value="">Aucun objet disponible</option>`}</select>`; }
   };
   tt.onchange = refreshTradeValue;
@@ -716,7 +675,7 @@ export async function profile(root, params) {
       <div>
         <div class="grid four" style="margin-bottom:14px">
           <div class="metric"><span class="k">Clients reçus</span><span class="v">${num(p.total_clients)}</span></div><div class="metric violet"><span class="k">VIP reçus</span><span class="v">${num(p.total_vip_clients)}</span></div><div class="metric"><span class="k">Showcases</span><span class="v">${num(p.showcases_done)}</span></div><div class="metric"><span class="k">Services</span><span class="v">${num(p.service_count)}</span></div>
-          <div class="metric green"><span class="k">Blackjack victoires</span><span class="v">${num(p.blackjack_wins)}</span></div><div class="metric red"><span class="k">Blackjack défaites</span><span class="v">${num(p.blackjack_losses)}</span><span class="s">${total ? `${Math.round((p.blackjack_wins / total) * 100)} % de réussite` : ""}</span></div><div class="metric"><span class="k">Verres bus</span><span class="v">${num(p.drinks_taken)}</span></div><div class="metric gold"><span class="k">Bitcoin</span><span class="v">${num(p.bitcoin)} BTC</span><span class="s">${money(p.bitcoin * sh.bitcoin_price)}</span></div>
+          <div class="metric green"><span class="k">Blackjack victoires</span><span class="v">${num(p.blackjack_wins)}</span></div><div class="metric red"><span class="k">Blackjack défaites</span><span class="v">${num(p.blackjack_losses)}</span><span class="s">${total ? `${Math.round((p.blackjack_wins / total) * 100)} % de réussite` : ""}</span></div><div class="metric"><span class="k">Verres bus</span><span class="v">${num(p.drinks_taken)}</span></div><div class="metric gold"><span class="k">Cryptomonnaies</span><span class="v">${money(p.bitcoin * sh.bitcoin_price + Object.entries(p.crypto || {}).reduce((sum, [key, qty]) => sum + Number(qty) * (sh.crypto_quotes?.[key]?.price || 0), 0))}</span><span class="s">${Number(p.bitcoin || 0).toLocaleString("fr-FR", { maximumFractionDigits: 8 })} BTC${Object.entries(p.crypto || {}).filter(([, q]) => Number(q) > 0).map(([k, q]) => ` · ${Number(q).toLocaleString("fr-FR", { maximumFractionDigits: 8 })} ${esc(k)}`).join("")}</span></div>
         </div>
         <div class="grid two"><div class="panel"><h3>🚘 Garage</h3><div class="collection">${coll(p.cars, sh.cars, "🚘")}</div></div><div class="panel"><h3>⌚ Montres</h3><div class="collection">${coll(p.watches, sh.watches, "⌚")}</div></div></div>
         <div class="panel" style="margin-top:14px"><h3>Historique récent</h3><div class="list">${p.recent_services.length ? p.recent_services.map((s) => `<div class="feed-item"><span class="t">${clock(s.ts)}</span><span class="i">${s.showcase_artist ? "🎤" : "💰"}</span><span>Service #${s.service_no} · ${num(s.clients)} clients · ${s.vips} VIP · <b class="gold">${money(s.total)}</b>${s.showcase_artist ? ` · ${esc(s.showcase_artist)}` : ""}</span></div>`).join("") : `<div class="muted small">Pas encore de service.</div>`}</div></div>
@@ -783,7 +742,7 @@ export async function levels(root) {
       <div class="panel"><h3>Niveaux du club</h3><div class="level-path">${C.levels.map((l) => `<div class="level-step ${l.level < c.level ? "done" : l.level === c.level ? "current" : ""}"><div class="n">${l.level < c.level ? "✓" : l.level}</div><div><div class="name" style="color:${LEVEL_THEMES[l.level].neon}">${LEVEL_THEMES[l.level].symbol} ${esc(l.name)}</div><div class="meta">Bonus ${pct(l.income_mult - 1)} · ${l.clients_min}–${l.clients_max} clients/service · entrée max ${money(l.max_entry)} · showcase ${pct(l.showcase_mult - 1)}</div></div><div class="num ${l.level === c.level + 1 ? "gold" : "muted"}">${l.upgrade_cost ? money(l.upgrade_cost) : "—"}</div></div>`).join("")}</div>
         ${d.next_level ? `<div class="divider"></div><div class="row between"><div><div class="kicker">Prochain niveau</div><b>${esc(d.next_level.name)}</b> — ${money(d.next_level.upgrade_cost)}</div><button class="btn ${c.cash >= d.next_level.upgrade_cost ? "gold" : "ghost"}" id="up" ${c.cash >= d.next_level.upgrade_cost ? "" : "disabled"}>Améliorer</button></div><div class="bar" style="margin-top:8px"><i style="width:${Math.min(100, (c.cash / d.next_level.upgrade_cost) * 100).toFixed(1)}%"></i></div>` : `<div class="notice gold" style="margin-top:12px">♛ Le Olivia — standing maximum.</div>`}</div>
       <div>
-        <div class="grid two" style="margin-bottom:14px"><div class="metric"><span class="k">Services</span><span class="v">${num(c.service_count)}</span></div><div class="metric"><span class="k">Clients reçus</span><span class="v">${num(c.total_clients)}</span></div><div class="metric violet"><span class="k">VIP reçus</span><span class="v">${num(c.total_vip_clients)}</span></div><div class="metric"><span class="k">Showcases</span><span class="v">${num(c.showcases_done)}</span></div><div class="metric gold"><span class="k">Richesse totale</span><span class="v">${money(d.net_worth)}</span></div><div class="metric"><span class="k">Estimation / service</span><span class="v">${money(d.estimate.total)}</span><span class="s">≈ ${num(d.estimate.clients)} clients</span></div></div>
+        <div class="grid two" style="margin-bottom:14px"><div class="metric"><span class="k">Services</span><span class="v">${num(c.service_count)}</span></div><div class="metric"><span class="k">Clients reçus</span><span class="v">${num(c.total_clients)}</span></div><div class="metric violet"><span class="k">VIP reçus</span><span class="v">${num(c.total_vip_clients)}</span></div><div class="metric"><span class="k">Showcases</span><span class="v">${num(c.showcases_done)}</span></div><div class="metric gold"><span class="k">Richesse totale</span><span class="v" data-own-wealth>${money(d.net_worth)}</span></div><div class="metric"><span class="k">Estimation / service</span><span class="v">${money(d.estimate.total)}</span><span class="s">≈ ${num(d.estimate.clients)} clients</span></div></div>
         <div class="panel"><h3>Économie actuelle</h3><div class="list small">
           <div class="row between"><span class="muted">Bonus général (standing)</span><b class="green">${pct(d.income_mult - 1)}</b></div><div class="row between"><span class="muted">Bar par service</span><b>${money(C.bar_min)} – ${money(C.bar_max)} × ${d.income_mult} × ${(1 + d.bonuses.bar).toFixed(2)}</b></div><div class="row between"><span class="muted">Clients par service</span><b>${d.client_range[0]} – ${d.client_range[1]} × ${d.price_client_mult.toFixed(3)}</b></div><div class="row between"><span class="muted">Dépense VIP</span><b>${money(C.vip_base_spend)} × ${d.income_mult} × ${(1 + d.bonuses.vip).toFixed(2)}</b></div><div class="row between"><span class="muted">VIP par service</span><b>${Math.round(C.vip_roll.two * 100)} % deux · ${Math.round(C.vip_roll.one * 100)} % un</b></div><div class="row between"><span class="muted">Événements</span><b>toutes les ${C.event_interval / 60} min, ${Math.round(C.event_chance * 100)} %</b></div><div class="row between"><span class="muted">Petits événements</span><b>${Math.round(C.fun_event_chance * 100)} % par service</b></div></div></div>
       </div>

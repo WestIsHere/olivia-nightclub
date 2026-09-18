@@ -20,6 +20,8 @@ Correspondance bot → moteur :
 """
 
 import random
+from decimal import Decimal
+from . import markets
 import time
 
 # ------------------------------------------------------------------
@@ -127,8 +129,11 @@ def net_worth(cfg, club):
         total += int(shop["cars"].get(item_id, {}).get("price", 0))
     for item_id in club.get("watches", []) or []:
         total += int(shop["watches"].get(item_id, {}).get("price", 0))
-    total += int(club.get("bitcoin", 0)) * int(shop["bitcoin_price"])
-    return total
+    total += Decimal(str(club.get("bitcoin", 0))) * Decimal(str(shop["bitcoin_price"]))
+    for symbol, amount in club.get("crypto", {}).items():
+        if symbol != "BTC":
+            total += Decimal(str(amount)) * Decimal(str(shop.get("crypto_quotes", {}).get(symbol, {}).get("price", 0)))
+    return int(total)
 
 
 def new_club(cfg, name, now=None):
@@ -173,6 +178,7 @@ def new_club(cfg, name, now=None):
         "cars": [],
         "watches": [],
         "bitcoin": 0,
+        "crypto": {},
         # Champs web (n'existent pas dans le bot, ignorés par lui)
         "created_at": now,
         "blackjack_game": None,
@@ -1023,10 +1029,11 @@ def trade_check(cfg, sender, trade_type, value):
             return False, "NO_MONEY"
         return True, "OK"
     if trade_type == "bitcoin":
-        amount = int(value)
-        if amount <= 0:
+        try:
+            amount = markets.quantity(value)
+        except ValueError:
             return False, "INVALID"
-        if int(sender.get("bitcoin", 0)) < amount:
+        if markets.balance(sender, "BTC") < amount:
             return False, "NO_BTC"
         return True, "OK"
     if trade_type in ("cars", "watches"):
@@ -1046,10 +1053,10 @@ def trade_apply(cfg, sender, target, trade_type, value):
         target["cash"] = int(target.get("cash", 0)) + amount
         return True, "OK", {"detail": format_money(amount), "amount": amount}
     if trade_type == "bitcoin":
-        amount = int(value)
-        sender["bitcoin"] = int(sender.get("bitcoin", 0)) - amount
-        target["bitcoin"] = int(target.get("bitcoin", 0)) + amount
-        return True, "OK", {"detail": f"{amount} BTC", "amount": amount}
+        amount = markets.quantity(value)
+        markets.set_balance(sender, "BTC", markets.balance(sender, "BTC") - amount)
+        markets.set_balance(target, "BTC", markets.balance(target, "BTC") + amount)
+        return True, "OK", {"detail": f"{amount} BTC", "amount": str(amount)}
     item_id = str(value)
     sender[trade_type].remove(item_id)
     target.setdefault(trade_type, []).append(item_id)

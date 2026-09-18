@@ -19,7 +19,7 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, services
+from . import auth, services, markets
 from .local_admin import is_host_request
 from .config import DEFAULT_CONFIG, public_config
 from .services import GameError, db, hub
@@ -44,14 +44,27 @@ def world_loop():
         _stop.wait(WORLD_INTERVAL)
 
 
+def market_loop():
+    while not _stop.is_set():
+        started = time.monotonic()
+        try:
+            services.update_markets()
+        except Exception:
+            traceback.print_exc()
+        _stop.wait(max(1, markets.POLL_SECONDS - (time.monotonic() - started)))
+
+
 @contextlib.asynccontextmanager
 async def lifespan(_app):
+    _stop.clear()
     services.cfg()
+    services.load_markets()
     try:
         print("Audio :", services.sync_audio_assets(broadcast=False))
     except Exception:
         traceback.print_exc()
     threading.Thread(target=world_loop, name="olivia-world", daemon=True).start()
+    threading.Thread(target=market_loop, name="olivia-markets", daemon=True).start()
     yield
     _stop.set()
 
@@ -200,7 +213,7 @@ def api_upgrade(user=Depends(current_user)):
 
 @app.post("/api/club/equipment")
 def api_equipment(body: dict = Body(...), user=Depends(current_user)):
-    return _with_state(user, services.action_equipment(user, str(body.get("item_id", ""))))
+    return _with_state(user, services.action_equipment(user, str(body.get("item_id", "")), body.get("expected_price")))
 
 
 @app.post("/api/club/manager")
@@ -257,11 +270,22 @@ def api_bj_stand(user=Depends(current_user)):
 # Boutique
 # ------------------------------------------------------------------
 
+@app.get("/api/markets")
+def api_markets(user=Depends(current_user)):
+    return services.market_view()
+
+
+@app.post("/api/crypto/{op}")
+def api_crypto(op: str, body: dict = Body(...), user=Depends(current_user)):
+    if op not in ("buy", "sell"):
+        raise GameError("INVALID", "Opération inconnue.")
+    return _with_state(user, services.action_crypto(user, op, str(body.get("symbol", "")).upper(), body.get("quantity")))
+
 @app.post("/api/shop/{op}")
 def api_shop(op: str, body: dict = Body(...), user=Depends(current_user)):
     if op not in ("buy", "sell"):
         raise GameError("INVALID", "Opération inconnue.")
-    return _with_state(user, services.action_shop(user, op, str(body.get("category", "")), str(body.get("item_id", ""))))
+    return _with_state(user, services.action_shop(user, op, str(body.get("category", "")), str(body.get("item_id", "")), body.get("expected_price")))
 
 
 @app.post("/api/bitcoin/{op}")

@@ -10,6 +10,7 @@ Chaque action :
 """
 
 import datetime
+import copy
 import json
 import queue
 import random
@@ -19,6 +20,7 @@ import time
 
 from . import audio as audio_assets
 from . import engine
+from . import markets
 from .showcase_media import choose_playlist, screen_payload
 from .config import build_config, public_config
 from .db import Database, LOCK
@@ -28,12 +30,91 @@ RNG = random.Random()
 db = Database()
 
 _config_cache = {"cfg": None}
+_market_state = {}
+_market_loaded = False
+_market_retry_at = 0
+_market_failures = 0
+_history_cursor = 0
 
 
-def cfg():
+def base_cfg():
     if _config_cache["cfg"] is None:
         _config_cache["cfg"] = build_config(db.get_setting("config_overrides", {}))
     return _config_cache["cfg"]
+
+
+def cfg():
+    return markets.priced_config(base_cfg(), _market_state)
+
+
+def load_markets():
+    global _market_state, _market_loaded
+    with LOCK:
+        if not _market_loaded:
+            _market_state = db.get_setting("live_markets_v1", {})
+            markets.advance_luxury(_market_state, base_cfg()["shop"], time.time())
+            _market_loaded = True
+
+
+def market_view():
+    return markets.public_snapshot(_market_state, base_cfg()["shop"])
+
+
+def update_markets():
+    """One shared fetch for the server, outside the transaction/game lock."""
+    global _market_state, _market_failures, _market_retry_at, _history_cursor
+    load_markets()
+    quotes, history, symbol = {}, None, None
+    now = time.time()
+    if now >= _market_retry_at:
+        try:
+            quotes = markets.fetch_tickers()
+            _market_failures = 0
+            _market_retry_at = 0
+        except Exception:
+            _market_failures += 1
+            _market_retry_at = now + min(120, 15 * 2 ** min(_market_failures - 1, 3))
+        if quotes:
+            # BTC uses its own amplified game history, never Kraken's raw curve.
+            symbols = [key for key in markets.CATALOG if key != "BTC"]
+            symbol = symbols[_history_cursor % len(symbols)]
+            _history_cursor += 1
+            row = _market_state.get("crypto", {}).get(symbol, {})
+            if now - row.get("history_fetched_at", 0) > 3600:
+                try:
+                    history = markets.fetch_history(symbol)
+                except Exception:
+                    pass  # Real observed samples remain available; never invent a curve.
+    with LOCK:
+        state = copy.deepcopy(_market_state)
+        stamp = time.time()
+        coins = state.setdefault("crypto", {})
+        for key, quote in quotes.items():
+            old = coins.get(key, {})
+            points = old.get("history", [])
+            if key == "BTC":
+                quote, already_amplified = markets.amplify_bitcoin(old, quote)
+                if not already_amplified:
+                    points = []
+            if key == symbol and history:
+                # Replace old candles, retaining observations newer than the downloaded history.
+                points = history + [p for p in points if p[0] > history[-1][0]]
+            coins[key] = dict(old, **quote, history=markets.history_point(points, quote["updated_at"], quote["price"]))
+            if key == "BTC":
+                coins[key]["change_pct"] = (quote["price"] / coins[key]["history"][0][1] - 1) * 100
+        if symbol in coins and history:
+            coins[symbol]["history_fetched_at"] = stamp
+        markets.advance_luxury(state, base_cfg()["shop"], stamp)
+        db.begin()
+        try:
+            db.set_setting("live_markets_v1", state)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        _market_state = state
+        payload = {"markets": market_view(), "shop": cfg()["shop"]}
+    hub.broadcast("markets", payload)
 
 
 def reload_config():
@@ -294,7 +375,8 @@ def public_club_view(entry, now=None):
         "robbery_power": engine.robbery_power(c, club),
         "cars": list(club.get("cars", []) or []),
         "watches": list(club.get("watches", []) or []),
-        "bitcoin": int(club.get("bitcoin", 0)),
+        "bitcoin": float(club.get("bitcoin", 0)),
+        "crypto": dict(club.get("crypto", {})),
         "blackjack_wins": int(club.get("blackjack_wins", 0)),
         "blackjack_losses": int(club.get("blackjack_losses", 0)),
         "drinks_taken": int(club.get("drinks_taken", 0)),
@@ -734,9 +816,12 @@ def action_blackjack(user, op, bet=None):
     return result
 
 
-def action_shop(user, op, category, item_id):
+def action_shop(user, op, category, item_id, expected_price=None):
     def fn(club):
         c = cfg()
+        current = c["shop"].get(category, {}).get(item_id, {}).get("price") if category in ("cars", "watches") else None
+        if expected_price is not None and expected_price != current:
+            raise GameError("PRICE_CHANGED", "La cote a évolué. Vérifiez le nouveau montant avant de confirmer.")
         if op == "buy":
             ok, code, payload = engine.shop_buy(c, club, category, item_id)
             if not ok:
@@ -763,34 +848,31 @@ def action_shop(user, op, category, item_id):
     return result
 
 
-def action_bitcoin(user, op, quantity):
+def action_crypto(user, op, symbol, amount):
     def fn(club):
-        c = cfg()
-        if op == "buy":
-            ok, code, payload = engine.bitcoin_buy(c, club, quantity)
-            if not ok:
-                if code == "NO_MONEY":
-                    raise GameError(code, f"Il faut {money(payload['cost'])} pour acheter {quantity} BTC, patron.", payload)
-                if code == "TOO_MANY":
-                    raise GameError(code, "Quantité trop importante pour une seule opération.")
-                raise GameError(code, "Entrez une quantité valide, patron.")
-            _tx(user["id"], club, "btc_buy", -payload["cost"], f"Achat {payload['quantity']} BTC", payload)
-            notify(user["id"], "bitcoin", "🪙", "Bitcoin acheté",
-                   f"{payload['quantity']} BTC pour {money(payload['cost'])}.", payload)
-        else:
-            ok, code, payload = engine.bitcoin_sell(c, club, quantity)
-            if not ok:
-                if code == "NO_BTC":
-                    raise GameError(code, f"Vous ne possédez pas {quantity} BTC, patron.")
-                if code == "TOO_MANY":
-                    raise GameError(code, "Quantité trop importante pour une seule opération.")
-                raise GameError(code, "Entrez une quantité valide, patron.")
-            _tx(user["id"], club, "btc_sell", payload["gain"], f"Revente {payload['quantity']} BTC", payload)
-            notify(user["id"], "bitcoin", "💸", "Bitcoin revendu",
-                   f"{payload['quantity']} BTC pour {money(payload['gain'])}.", payload)
+        quote = _market_state.get("crypto", {}).get(symbol)
+        ok, code, payload = markets.trade(club, symbol, op, amount, quote)
+        if not ok:
+            messages = {
+                "MARKET_STALE": "Cours indisponible ou trop ancien. Les échanges reprendront avec un cours frais.",
+                "NO_MONEY": "Trésorerie insuffisante, frais inclus.",
+                "NOT_OWNED": "Vous ne possédez pas assez de cette crypto.",
+                "MINIMUM": "Le montant de cette opération doit atteindre 1 €.",
+                "INVALID": "Quantité invalide : de 0,00000001 à 1 000 000, avec 8 décimales maximum.",
+            }
+            raise GameError(code, messages.get(code, "Opération impossible."), payload)
+        amount_eur = -payload["cost"] if op == "buy" else payload["gain"]
+        label = f"{'Achat' if op == 'buy' else 'Vente'} {payload['quantity']} {symbol}"
+        _tx(user["id"], club, "crypto_" + op, amount_eur, label, payload)
+        notify(user["id"], "crypto", "🪙", label, f"{money(abs(amount_eur))}, frais inclus.", payload)
         return payload
-    club, result = mutate(user["id"], fn)
+    _, result = mutate(user["id"], fn)
     return result
+
+
+def action_bitcoin(user, op, quantity):
+    # Existing clients use exactly the same fresh quote and validation.
+    return action_crypto(user, op, "BTC", quantity)
 
 
 def _target_user(target_id, user):
@@ -902,7 +984,7 @@ def action_trade_propose(user, target_id, trade_type, value):
     if trade_type not in ("money", "bitcoin", "cars", "watches"):
         raise GameError("INVALID_TYPE", "Type de trade invalide.")
     try:
-        value = int(value) if trade_type in ("money", "bitcoin") else str(value)
+        value = int(value) if trade_type == "money" else str(markets.quantity(value)) if trade_type == "bitcoin" else str(value)
     except (TypeError, ValueError):
         raise GameError("INVALID", "Valeur invalide.")
 
@@ -928,7 +1010,7 @@ def _trade_detail(trade_type, value):
     if trade_type == "money":
         return money(int(value))
     if trade_type == "bitcoin":
-        return f"{int(value)} BTC"
+        return f"{value} BTC"
     return c["shop"][trade_type].get(str(value), {"name": str(value)})["name"]
 
 
