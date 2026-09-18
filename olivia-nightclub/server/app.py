@@ -13,11 +13,13 @@ import queue
 import threading
 import time
 import traceback
+import tempfile
 from typing import Optional
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from . import auth, services, markets
 from .local_admin import is_host_request
@@ -526,6 +528,24 @@ async def api_events(request: Request, user=Depends(current_user)):
 # ------------------------------------------------------------------
 # Administration
 # ------------------------------------------------------------------
+
+@app.get("/api/admin/backup")
+def api_admin_backup(admin=Depends(current_admin)):
+    directory = tempfile.TemporaryDirectory(prefix="olivia-export-")
+    path = os.path.join(directory.name, "olivia.db")
+    try:
+        report = db.backup_to(path)
+        return FileResponse(
+            path, media_type="application/octet-stream",
+            filename=f"olivia-{time.strftime('%Y%m%d-%H%M%S', time.gmtime())}-UTC.db",
+            headers={"Cache-Control": "no-store, private", "X-Content-Type-Options": "nosniff",
+                     "X-Backup-SHA256": report["sha256"]},
+            background=BackgroundTask(directory.cleanup),
+        )
+    except Exception:
+        directory.cleanup()
+        raise
+
 
 @app.get("/api/auth/local-admin")
 def api_local_admin_available(request: Request):

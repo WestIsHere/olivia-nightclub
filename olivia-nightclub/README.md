@@ -27,6 +27,10 @@ Voir [la présentation de la refonte](docs/REFONTE_UI.md).
 
 Tests du moteur (sans serveur) : `python tests/test_engine.py`.
 
+**Sauvegardes et mises à jour sans remise à zéro :** voir
+[la procédure de sauvegarde et restauration](docs/SAUVEGARDE.md).
+Sur Render, une base absente bloque désormais le démarrage par défaut.
+
 Pour jouer à plusieurs : les autres joueurs ouvrent `http://<ton-ip>:8000` sur le
 réseau local, ou déploie le dossier sur un hébergeur Python (Railway, Render, VPS…)
 avec la commande `python run.py` (port via `OLIVIA_PORT`).

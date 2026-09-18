@@ -13,6 +13,8 @@ import sqlite3
 import threading
 import time
 
+from . import backups
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.environ.get("OLIVIA_DB", os.path.join(DATA_DIR, "olivia.db"))
@@ -150,6 +152,7 @@ MIGRATIONS = [
 
 class Database:
     def __init__(self, path=DB_PATH):
+        backups.require_existing_database(path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         self.path = path
         self.conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
@@ -163,6 +166,10 @@ class Database:
                 self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ctype}")
 
     # ---------------- transactions ----------------
+    def backup_to(self, destination):
+        with LOCK:
+            return backups.snapshot(self.conn, destination)
+
     def begin(self):
         self.conn.execute("BEGIN")
 
